@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 import sys
 
 from map_calc_tools import (
@@ -60,6 +61,9 @@ def parse_arguments():
         sys.exit(0)
 
     args = parser.parse_args()
+
+    # Нормализация пути для кросс-платформенности
+    args.image_file = os.path.normpath(args.image_file)
 
     # Валидация входного файла
     if not args.image_file.lower().endswith(('.png', '.jpg', '.jpeg')):
