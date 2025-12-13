@@ -45,6 +45,7 @@ def main():
     else:
         max_zoom = args.max_zoom
 
+    # Рассчитываем целевой размер изображения для размещения на карте в тайлах
     tile_top_left = {
         "coords_tile": dict(
             zip(
