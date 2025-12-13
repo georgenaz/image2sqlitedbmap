@@ -10,7 +10,7 @@ def get_database_filename(image_file):
     добавляя версию если файл уже существует.
     """
     base_name = os.path.splitext(os.path.basename(image_file))[0]
-    db_name = base_name + '.sqlitedb'
+    db_name = base_name + ".sqlitedb"
     version = 1
     while os.path.exists(db_name):
         db_name = f"{base_name}-v{version}.sqlitedb"
@@ -31,7 +31,7 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
     cursor = conn.cursor()
 
     # Создание таблицы tiles
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE tiles (
             x INTEGER,
             y INTEGER,
@@ -40,18 +40,21 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
             image BLOB,
             PRIMARY KEY (x, y, z, s)
         )
-    ''')
+    """)
 
     # Создание таблицы info
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE info (
             maxzoom INTEGER,
-            minzoom INTEGER
+            minzoom INTEGER,
+            tilenumbering TEXT
         )
-    ''')
+    """)
 
     # Вставка начальных значений в info
-    cursor.execute('INSERT INTO info (maxzoom, minzoom) VALUES (?, ?)', (max_zoom, min_zoom))
+    cursor.execute(
+        "INSERT INTO info (maxzoom, minzoom) VALUES (?, ?)", (max_zoom, min_zoom)
+    )
 
     conn.commit()
     conn.close()

@@ -192,8 +192,9 @@ def get_tile_center_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]
     return lat_deg, lon_deg
 
 
-
-def get_tile_lefttop_corner_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]:
+def get_tile_lefttop_corner_gps(
+    x_tile: int, y_tile: int, z: int
+) -> tuple[float, float]:
     """
     Преобразует координаты тайла (X, Y, Z) в GPS-координаты (широта, долгота),
     соответствующие левому верхнему углу этого тайла в системе Web Mercator (XYZ/OSM).
@@ -240,11 +241,11 @@ def get_tile_4corners_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, floa
     """
 
     result = {
-            'top_left': (get_tile_lefttop_corner_gps(x_tile, y_tile, z)),
-            'top_right': (get_tile_lefttop_corner_gps(x_tile + 1, y_tile, z)),
-            'bottom_right': (get_tile_lefttop_corner_gps(x_tile + 1, y_tile + 1, z)),
-            'bottom_left': (get_tile_lefttop_corner_gps(x_tile, y_tile + 1, z))
-        }
+        "top_left": (get_tile_lefttop_corner_gps(x_tile, y_tile, z)),
+        "top_right": (get_tile_lefttop_corner_gps(x_tile + 1, y_tile, z)),
+        "bottom_right": (get_tile_lefttop_corner_gps(x_tile + 1, y_tile + 1, z)),
+        "bottom_left": (get_tile_lefttop_corner_gps(x_tile, y_tile + 1, z)),
+    }
 
     return result
 
