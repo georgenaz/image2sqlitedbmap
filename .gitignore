@@ -13,3 +13,4 @@ wheels/
 uv.lock
 .python-version
 test_image.png
+*.sqlitedb

@@ -52,9 +52,24 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
     """)
 
     # Вставка начальных значений в info
-    cursor.execute("INSERT INTO info (maxzoom, minzoom) VALUES (?, ?)", (max_zoom, min_zoom))
+    cursor.execute("INSERT INTO info (maxzoom, minzoom, tilenumbering) VALUES (?, ?, 0)", (max_zoom, min_zoom))
 
     conn.commit()
     conn.close()
 
     print(f"База данных '{db_name}' создана успешно.")
+
+
+def insert_tile(conn, x, y, z, s, image_data):
+    """
+    Вставляет запись о тайле в таблицу tiles.
+
+    Args:
+        conn: SQLite соединение.
+        x, y, z, s: Координаты и параметры тайла.
+        image_data: Данные изображения в формате bytes.
+    """
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tiles (x, y, z, s, image) VALUES (?, ?, ?, ?, ?)",
+                   (x, y, z, s, image_data))
+    conn.commit()

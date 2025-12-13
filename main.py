@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
 import io
+import sqlite3
 import sys
 
 from PIL import Image
 
 from arguments import parse_arguments
 
-from database import get_database_filename, create_database
+from database import get_database_filename, create_database, insert_tile
 from map_calc_tools import (
     calculate_optimal_z,
     calc_tile_object,
@@ -96,7 +97,45 @@ def main():
     img["binary"] = final_img
 
     # Создаем базу данных
-    create_database(db_name, max_zoom=int(max_zoom), min_zoom=0)
+    create_database(db_name, max_zoom=int(max_zoom), min_zoom=3)
+
+    # Разрезаем изображение на тайлы и сохраняем в базу данных
+    num_tiles_x = img["binary"].width // 256
+    num_tiles_y = img["binary"].height // 256
+    total_tiles = num_tiles_x * num_tiles_y
+
+    print(f"Количество тайлов для обработки: {total_tiles} ({num_tiles_x}x{num_tiles_y})")
+
+    conn = sqlite3.connect(db_name)
+
+    tile_count = 0
+    for tile_y_offset in range(num_tiles_y):
+        for tile_x_offset in range(num_tiles_x):
+            x = tile_top_left["coords_tile"]["x"] + tile_x_offset
+            y = tile_top_left["coords_tile"]["y"] + tile_y_offset
+            z = int(max_zoom)
+            s = 0
+
+            # Обрезаем фрагмент 256x256
+            left = tile_x_offset * 256
+            upper = tile_y_offset * 256
+            right = left + 256
+            lower = upper + 256
+            cropped = img["binary"].crop((left, upper, right, lower))
+
+            # Сохраняем в формате PNG с максимальным сжатием для минимизации размера
+            buffer = io.BytesIO()
+            cropped.save(buffer, format='PNG', compress_level=9)
+            image_data = buffer.getvalue()
+
+            # Вставляем в базу данных
+            insert_tile(conn, x, y, z, s, image_data)
+
+            tile_count += 1
+
+    conn.close()
+
+    print(f"Обработка завершена. Сохранено тайлов: {tile_count}")
 
 
 
