@@ -1,9 +1,9 @@
 [project]
 name = "image2sqlitedbmap"
 version = "0.1.0"
-description = "Pack image to sqlitedb"
+description = "Packing an image into sqlitedb for use with navigation software such as osmand"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "ipython>=9.8.0",
     "pillow>=12.0.0",
