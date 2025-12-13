@@ -65,11 +65,13 @@ def main():
 
     print(f"Исходные размеры изображения: {img['size']['current']['width']}x{img['size']['current']['height']}")
     print(f"Максимальный zoom: {max_zoom}")
+
+    print(f"Размеры изображения для карты: {img['size']['new']['width']}x{img['size']['new']['height']}")
     print(f"Имя базы данных: {db_name}")
 
-    print("Верхний тайл: ", tile_top_left["coords_tile"])
-    print("Нижний тайл: ", tile_bottom_right["coords_tile"])
-    print(f"Размеры изображения для карты: {img['size']['new']['width']}x{img['size']['new']['height']}")
+    if args.analyze:
+        print("Анализ завершен.")
+        return
 
     # === Main processing ===
     # Load and prepare image
