@@ -18,7 +18,7 @@ def get_database_filename(image_file):
     return db_name
 
 
-def create_database(db_name, max_zoom=None, min_zoom=0):
+def create_database(db_name, max_zoom=None, min_zoom=0, conn=None):
     """
     Создает новый файл базы данных SQLite и инициализирует таблицы tiles и info.
 
@@ -26,13 +26,18 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
         db_name: Имя файла базы данных
         max_zoom: Максимальный уровень масштабирования
         min_zoom: Минимальный уровень масштабирования (по умолчанию 0)
+        conn: SQLite соединение (опционально, если не указан, создается новое и закрывается)
     """
-    conn = sqlite3.connect(db_name)
+    own_conn = False
+    if conn is None:
+        own_conn = True
+        conn = sqlite3.connect(db_name)
+
     cursor = conn.cursor()
 
     # Создание таблицы tiles
     cursor.execute("""
-        CREATE TABLE tiles (
+        CREATE TABLE IF NOT EXISTS tiles (
             x INTEGER,
             y INTEGER,
             z INTEGER,
@@ -44,7 +49,7 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
 
     # Создание таблицы info
     cursor.execute("""
-        CREATE TABLE info (
+        CREATE TABLE IF NOT EXISTS info (
             maxzoom INTEGER,
             minzoom INTEGER,
             tilenumbering TEXT
@@ -52,12 +57,15 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
     """)
 
     # Вставка начальных значений в info
-    cursor.execute("INSERT INTO info (maxzoom, minzoom, tilenumbering) VALUES (?, ?, 0)", (max_zoom, min_zoom))
+    cursor.execute("INSERT OR REPLACE INTO info (maxzoom, minzoom, tilenumbering) VALUES (?, ?, 0)", (max_zoom, min_zoom))
 
-    conn.commit()
-    conn.close()
+    if not own_conn:
+        conn.commit()  # Хотя SQLite auto-commit, но на всякий
+    else:
+        conn.close()
 
-    print(f"База данных '{db_name}' создана успешно.")
+    if own_conn:
+        print(f"База данных '{db_name}' создана успешно.")
 
 
 def insert_tile(conn, x, y, z, s, image_data):
