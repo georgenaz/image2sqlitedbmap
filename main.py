@@ -56,8 +56,6 @@ def main():
     # Генерируем уникальное имя базы данных
     db_name = get_database_filename(args.image_file)
 
-    #  'top_left': (lat_tl, lon_tl),
-    #  'bottom_right': (lat_br, lon_br),
     img["shift"] = {
         "top_left": find_pixel_coords(256, 256, tile_top_left["coords_gps"], in_coords["top_left"]),
         "bottom_right": find_pixel_coords(256, 256, tile_bottom_right["coords_gps"], in_coords["bottom_right"]),
@@ -74,6 +72,9 @@ def main():
     print("Верхний тайл: ", tile_top_left["coords_tile"])
     print("Нижний тайл: ", tile_bottom_right["coords_tile"])
     print(f"Размеры изображения для карты: {img['size']['new']['width']}x{img['size']['new']['height']}")
+
+    # === Main processing ===
+
 
 
 if __name__ == "__main__":
