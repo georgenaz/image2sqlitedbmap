@@ -42,9 +42,7 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict) -> 
         )
 
     if img_width_px == 0 or img_height_px == 0:
-        raise ValueError(
-            "Размеры изображения после обрезки слишком малы для расчета Z."
-        )
+        raise ValueError("Размеры изображения после обрезки слишком малы для расчета Z.")
 
     # 2. Извлечение координат для расчета охвата
     # Для расчета охвата по горизонтали берем долготу левого и правого края
@@ -132,17 +130,47 @@ def get_tile_coords_by_gps(lat: float, lon: float, z: int) -> tuple[int, int]:
     # math.log - это натуральный логарифм (ln)
     # 1/math.cos(lat_rad) - это sec(lat_rad)
 
-    y_tile = math.floor(
-        n
-        * (1 - math.log(math.tan(lat_rad) + (1.0 / math.cos(lat_rad))) / math.pi)
-        / 2.0
-    )
+    y_tile = math.floor(n * (1 - math.log(math.tan(lat_rad) + (1.0 / math.cos(lat_rad))) / math.pi) / 2.0)
 
     # Убедимся, что координаты находятся в пределах допустимого диапазона [0, N-1]
     x_tile = max(0, min(x_tile, n - 1))
     y_tile = max(0, min(y_tile, n - 1))
 
     return x_tile, y_tile
+
+
+def get_tile_coords_dict(lat: float, lon: float, z: int) -> dict[str, int]:
+    """
+    Преобразует GPS-координаты (широта, долгота) и уровень масштабирования Z
+    в словарь координат тайла {'x': tile_x, 'y': tile_y} в системе Web Mercator (XYZ/OSM).
+
+    Args:
+        lat: Широта в десятичных градусах.
+        lon: Долгота в десятичных градусах.
+        z: Уровень масштабирования (zoom level).
+
+    Returns:
+        Словарь с ключами 'x' и 'y' и целочисленными координатами тайла.
+    """
+    return dict(zip(("x", "y"), get_tile_coords_by_gps(lat, lon, z)))
+
+
+def calc_tile_object(lat: float, lon: float, zoom: int) -> dict:
+    """
+    Создает объект тайла с координатами тайла и GPS-координатами.
+
+    Args:
+        lat: Широта в десятичных градусах.
+        lon: Долгота в десятичных градусах.
+        zoom: Уровень масштабирования (zoom level).
+
+    Returns:
+        Словарь с 'coords_tile' и 'coords_gps'.
+    """
+    return {
+        "coords_tile": get_tile_coords_dict(lat, lon, zoom),
+        "coords_gps": {"lat": lat, "lon": lon},
+    }
 
 
 def get_tile_center_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]:
@@ -192,9 +220,7 @@ def get_tile_center_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]
     return lat_deg, lon_deg
 
 
-def get_tile_lefttop_corner_gps(
-    x_tile: int, y_tile: int, z: int
-) -> tuple[float, float]:
+def get_tile_lefttop_corner_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]:
     """
     Преобразует координаты тайла (X, Y, Z) в GPS-координаты (широта, долгота),
     соответствующие левому верхнему углу этого тайла в системе Web Mercator (XYZ/OSM).
@@ -333,10 +359,7 @@ def find_pixel_coords(
     merc_x_target, merc_y_target = lat_lon_to_mercator_pos(target_lat, target_lon)
 
     # 4. Проверяем, находится ли точка в пределах границ изображения по Меркатору
-    if not (
-        merc_x_left <= merc_x_target <= merc_x_right
-        and merc_y_top <= merc_y_target <= merc_y_bottom
-    ):
+    if not (merc_x_left <= merc_x_target <= merc_x_right and merc_y_top <= merc_y_target <= merc_y_bottom):
         print("Внимание: Целевая точка находится за пределами GPS-границ изображения.")
         # Можно вернуть None или координаты ближайшего края
         # return None

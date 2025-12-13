@@ -52,9 +52,7 @@ def create_database(db_name, max_zoom=None, min_zoom=0):
     """)
 
     # Вставка начальных значений в info
-    cursor.execute(
-        "INSERT INTO info (maxzoom, minzoom) VALUES (?, ?)", (max_zoom, min_zoom)
-    )
+    cursor.execute("INSERT INTO info (maxzoom, minzoom) VALUES (?, ?)", (max_zoom, min_zoom))
 
     conn.commit()
     conn.close()

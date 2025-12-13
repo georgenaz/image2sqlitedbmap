@@ -8,3 +8,5 @@ dependencies = [
     "ipython>=9.8.0",
     "pillow>=12.0.0",
 ]
+[tool.ruff]
+line-length = 120

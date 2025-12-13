@@ -9,9 +9,7 @@ def parse_arguments():
         usage="%(prog)s <image_file> <top_left_lat> <top_left_lon> <bottom_right_lat> <bottom_right_lon> [max_zoom] [output_format] [quality] [--analyze]",
     )
 
-    parser.add_argument(
-        "image_file", help="Имя файла изображения (формат png или jpeg)"
-    )
+    parser.add_argument("image_file", help="Имя файла изображения (формат png или jpeg)")
     parser.add_argument(
         "top_left_lat",
         type=float,
@@ -68,9 +66,7 @@ def parse_arguments():
 
     # Валидация расширения входного файла
     if not args.image_file.lower().endswith((".png", ".jpg", ".jpeg")):
-        parser.error(
-            f"Файл изображения должен быть в формате png или jpeg: {args.image_file}"
-        )
+        parser.error(f"Файл изображения должен быть в формате png или jpeg: {args.image_file}")
 
     # Валидация zoom
     if args.max_zoom is not None and not (0 <= args.max_zoom <= 22):
