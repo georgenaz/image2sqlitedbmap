@@ -167,9 +167,11 @@ def calc_tile_object(lat: float, lon: float, zoom: int) -> dict:
     Returns:
         Словарь с 'coords_tile' и 'coords_gps'.
     """
+    coords_tile = get_tile_coords_dict(lat, lon, zoom)
+
     return {
-        "coords_tile": get_tile_coords_dict(lat, lon, zoom),
-        "coords_gps": {"lat": lat, "lon": lon},
+        "coords_tile": coords_tile,
+        "coords_gps": get_tile_4corners_gps(coords_tile["x"], coords_tile["y"], zoom),
     }
 
 

@@ -31,7 +31,7 @@ def main():
 
     img = {"size": {"current": {"width": original_width, "height": original_height}}}
 
-    coords = {
+    in_coords = {
         "top_left": (args.top_left_lat, args.top_left_lon),
         "top_right": (args.top_left_lat, args.bottom_right_lon),
         "bottom_right": (args.bottom_right_lat, args.bottom_right_lon),
@@ -40,13 +40,13 @@ def main():
 
     # Рассчитываем оптимальный zoom, если не указан
     if args.max_zoom is None:
-        max_zoom = calculate_optimal_z(img["size"]["current"]["width"], img["size"]["current"]["height"], coords)
+        max_zoom = calculate_optimal_z(img["size"]["current"]["width"], img["size"]["current"]["height"], in_coords)
     else:
         max_zoom = args.max_zoom
 
     # Рассчитываем целевой размер изображения для размещения на карте в тайлах
-    tile_top_left = calc_tile_object(coords["top_left"][0], coords["top_left"][1], max_zoom)
-    tile_bottom_right = calc_tile_object(coords["bottom_right"][0], coords["bottom_right"][1], max_zoom)
+    tile_top_left = calc_tile_object(in_coords["top_left"][0], in_coords["top_left"][1], max_zoom)
+    tile_bottom_right = calc_tile_object(in_coords["bottom_right"][0], in_coords["bottom_right"][1], max_zoom)
 
     img["size"]["new"] = {
         "width": (tile_bottom_right["coords_tile"]["x"] - tile_top_left["coords_tile"]["x"] + 1) * 256,
@@ -55,6 +55,14 @@ def main():
 
     # Генерируем уникальное имя базы данных
     db_name = get_database_filename(args.image_file)
+
+    #  'top_left': (lat_tl, lon_tl),
+    #  'bottom_right': (lat_br, lon_br),
+    img["shift"] = {
+        "top_left": find_pixel_coords(256, 256, tile_top_left["coords_gps"], in_coords["top_left"]),
+        "bottom_right": find_pixel_coords(256, 256, tile_bottom_right["coords_gps"], in_coords["bottom_right"]),
+    }
+    print(img["shift"])
 
     # Создаем базу данных
     # create_database(db_name, max_zoom=int(max_zoom), min_zoom=0)
