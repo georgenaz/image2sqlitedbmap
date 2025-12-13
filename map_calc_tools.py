@@ -103,7 +103,7 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict) -> 
     return optimal_z
 
 
-def get_tile_coords(lat: float, lon: float, z: int) -> tuple[int, int]:
+def get_tile_coords_by_gps(lat: float, lon: float, z: int) -> tuple[int, int]:
     """
     Преобразует GPS-координаты (широта, долгота) и уровень масштабирования Z
     в координаты тайла (X, Y) в системе Web Mercator (XYZ/OSM).
@@ -190,6 +190,63 @@ def get_tile_center_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]
     lat_deg = math.degrees(lat_rad)
 
     return lat_deg, lon_deg
+
+
+
+def get_tile_lefttop_corner_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]:
+    """
+    Преобразует координаты тайла (X, Y, Z) в GPS-координаты (широта, долгота),
+    соответствующие левому верхнему углу этого тайла в системе Web Mercator (XYZ/OSM).
+
+    Args:
+        x_tile: X-координата тайла (целое число).
+        y_tile: Y-координата тайла (целое число).
+        z: Уровень масштабирования (zoom level).
+
+    Returns:
+        Кортеж (latitude, longitude) с GPS-координатами левого верхнего угла тайла
+    """
+
+    n = 2**z
+
+    lon_deg = x_tile / n * 360.0 - 180.0
+
+    y_pos_relative = y_tile / n
+    merc_n = math.pi * (1.0 - 2.0 * y_pos_relative)
+    lat_rad = math.atan(math.sinh(merc_n))
+    lat_deg = math.degrees(lat_rad)
+
+    return lat_deg, lon_deg
+
+
+def get_tile_4corners_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]:
+    """
+    Преобразует координаты тайла (X, Y, Z) в GPS-координаты (широта, долгота),
+    соответствующие углам этого тайла в системе Web Mercator (XYZ/OSM).
+
+    Args:
+        x_tile: X-координата тайла (целое число).
+        y_tile: Y-координата тайла (целое число).
+        z: Уровень масштабирования (zoom level).
+
+    Returns:
+        Словарь кортежей (latitude, longitude) с GPS-координатами углов тайла
+        Пример: {
+            'top_left': (lat_tl, lon_tl),
+            'top_right': (lat_tr, lon_tr),
+            'bottom_right': (lat_br, lon_br),
+            'bottom_left': (lat_bl, lon_bl)
+        }
+    """
+
+    result = {
+            'top_left': (get_tile_lefttop_corner_gps(x_tile, y_tile, z)),
+            'top_right': (get_tile_lefttop_corner_gps(x_tile + 1, y_tile, z)),
+            'bottom_right': (get_tile_lefttop_corner_gps(x_tile + 1, y_tile + 1, z)),
+            'bottom_left': (get_tile_lefttop_corner_gps(x_tile, y_tile + 1, z))
+        }
+
+    return result
 
 
 def lat_lon_to_mercator_pos(lat_deg, lon_deg):
