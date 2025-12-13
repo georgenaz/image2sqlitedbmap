@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import io
 import sys
 
 from PIL import Image
@@ -60,10 +61,6 @@ def main():
         "top_left": find_pixel_coords(256, 256, tile_top_left["coords_gps"], in_coords["top_left"]),
         "bottom_right": find_pixel_coords(256, 256, tile_bottom_right["coords_gps"], in_coords["bottom_right"]),
     }
-    print(img["shift"])
-
-    # Создаем базу данных
-    # create_database(db_name, max_zoom=int(max_zoom), min_zoom=0)
 
     print(f"Исходные размеры изображения: {img['size']['current']['width']}x{img['size']['current']['height']}")
     print(f"Максимальный zoom: {max_zoom}")
@@ -74,6 +71,34 @@ def main():
     print(f"Размеры изображения для карты: {img['size']['new']['width']}x{img['size']['new']['height']}")
 
     # === Main processing ===
+    # Load and prepare image
+    img["binary"] = Image.open(args.image_file).convert('RGBA')  # Ensure transparency support
+
+    # Convert JPEG to PNG format if original image is JPEG
+    if img["binary"].format == 'JPEG':
+        buffer = io.BytesIO()
+        img["binary"].save(buffer, format='PNG')
+        buffer.seek(0)
+        img["binary"] = Image.open(buffer)
+
+    # Resize image to calculated dimensions
+    new_width = img['size']['new']['width'] - img["shift"]["top_left"][0] - (256 - img["shift"]["bottom_right"][0])
+    new_height = img['size']['new']['height'] - img["shift"]["top_left"][1] - (256 - img["shift"]["bottom_right"][1])
+    resized_img = img["binary"].resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+    # Create final image with transparent background
+    final_img = Image.new('RGBA', (img['size']['new']['width'], img['size']['new']['height']))
+
+    # Paste resized image with offset
+    final_img.paste(resized_img, img["shift"]["top_left"])
+
+    # Update img["binary"] for memory efficiency (only one instance)
+    img["binary"] = final_img
+
+    # Создаем базу данных
+    create_database(db_name, max_zoom=int(max_zoom), min_zoom=0)
+
+
 
 
 
