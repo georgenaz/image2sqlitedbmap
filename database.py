@@ -57,7 +57,9 @@ def create_database(db_name, max_zoom=None, min_zoom=0, conn=None):
     """)
 
     # Вставка начальных значений в info
-    cursor.execute("INSERT OR REPLACE INTO info (maxzoom, minzoom, tilenumbering) VALUES (?, ?, 0)", (max_zoom, min_zoom))
+    cursor.execute(
+        "INSERT OR REPLACE INTO info (maxzoom, minzoom, tilenumbering) VALUES (?, ?, 0)", (max_zoom, min_zoom)
+    )
 
     if not own_conn:
         conn.commit()  # Хотя SQLite auto-commit, но на всякий
@@ -78,6 +80,5 @@ def insert_tile(conn, x, y, z, s, image_data):
         image_data: Данные изображения в формате bytes.
     """
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO tiles (x, y, z, s, image) VALUES (?, ?, ?, ?, ?)",
-                   (x, y, z, s, image_data))
+    cursor.execute("INSERT INTO tiles (x, y, z, s, image) VALUES (?, ?, ?, ?, ?)", (x, y, z, s, image_data))
     conn.commit()

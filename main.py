@@ -37,11 +37,11 @@ def precalculate_values(zoom, coords, img_size):
 
 
 def process_image(conn, zoom, tile_top_left, tile_bottom_right, new_size, shift, img_file):
-    img = Image.open(img_file).convert('RGBA')
+    img = Image.open(img_file).convert("RGBA")
 
-    if img.format == 'JPEG':
+    if img.format == "JPEG":
         buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
+        img.save(buffer, format="PNG")
         buffer.seek(0)
         img = Image.open(buffer)
 
@@ -54,7 +54,7 @@ def process_image(conn, zoom, tile_top_left, tile_bottom_right, new_size, shift,
 
     resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-    final_img = Image.new('RGBA', (new_size["width"], new_size["height"]))
+    final_img = Image.new("RGBA", (new_size["width"], new_size["height"]))
 
     final_img.paste(resized_img, shift["top_left"])
 
@@ -81,7 +81,7 @@ def process_image(conn, zoom, tile_top_left, tile_bottom_right, new_size, shift,
             cropped = img.crop((left, upper, right, lower))
 
             buffer = io.BytesIO()
-            cropped.save(buffer, format='PNG', compress_level=9)
+            cropped.save(buffer, format="PNG", compress_level=9)
             image_data = buffer.getvalue()
 
             insert_tile(conn, x, y, z, s, image_data)
@@ -148,9 +148,6 @@ def main():
     conn.close()
 
     print("Обработка завершена.")
-
-
-
 
 
 if __name__ == "__main__":
