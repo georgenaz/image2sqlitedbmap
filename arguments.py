@@ -6,7 +6,7 @@ import sys
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Скрипт для упаковки изображений в sqlitedb-файл карты с использованием указанных GPS-координат (по Web-Mercator в десятичных градусах (WGS84)).",
-        usage="%(prog)s <image_file> <top_left_lat> <top_left_lon> <bottom_right_lat> <bottom_right_lon> [max_zoom] [output_format] [quality] [--analyze]",
+        usage="%(prog)s <image_file> <top_left_lat> <top_left_lon> <top_right_lat> <top_right_lon> <bottom_right_lat> <bottom_right_lon> <bottom_left_lat> <bottom_left_lon> [max_zoom] [output_format] [quality] [--analyze]",
     )
 
     parser.add_argument("image_file", help="Имя файла изображения (формат png или jpeg)")
@@ -21,6 +21,16 @@ def parse_arguments():
         help="Долгота GPS-координаты левого верхнего угла изображения",
     )
     parser.add_argument(
+        "top_right_lat",
+        type=float,
+        help="Широта GPS-координаты правого верхнего угла изображения",
+    )
+    parser.add_argument(
+        "top_right_lon",
+        type=float,
+        help="Долгота GPS-координаты правого верхнего угла изображения",
+    )
+    parser.add_argument(
         "bottom_right_lat",
         type=float,
         help="Широта GPS-координаты правого нижнего угла изображения",
@@ -29,6 +39,16 @@ def parse_arguments():
         "bottom_right_lon",
         type=float,
         help="Долгота GPS-координаты правого нижнего угла изображения",
+    )
+    parser.add_argument(
+        "bottom_left_lat",
+        type=float,
+        help="Широта GPS-координаты левого нижнего угла изображения",
+    )
+    parser.add_argument(
+        "bottom_left_lon",
+        type=float,
+        help="Долгота GPS-координаты левого нижнего угла изображения",
     )
     parser.add_argument(
         "max_zoom",

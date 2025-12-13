@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import io
+import math
 import sqlite3
 import sys
 
@@ -107,9 +108,9 @@ def main():
 
     in_coords = {
         "top_left": (args.top_left_lat, args.top_left_lon),
-        "top_right": (args.top_left_lat, args.bottom_right_lon),
+        "top_right": (args.top_right_lat, args.top_right_lon),
         "bottom_right": (args.bottom_right_lat, args.bottom_right_lon),
-        "bottom_left": (args.bottom_right_lat, args.top_left_lon),
+        "bottom_left": (args.bottom_left_lat, args.bottom_left_lon),
     }
 
     # Рассчитываем оптимальный zoom, если не указан
@@ -123,12 +124,18 @@ def main():
     min_zoom = max_zoom
     zooms = list(range(min_zoom, max_zoom + 1))
 
+    # Рассчитываем угол поворота
+    delta_lat = in_coords["top_right"][0] - in_coords["top_left"][0]
+    delta_lon = in_coords["top_right"][1] - in_coords["top_left"][1]
+    rotate_angle = math.degrees(math.atan2(delta_lat, delta_lon))
+
     # Генерируем уникальное имя базы данных
     db_name = get_database_filename(args.image_file)
 
     print(f"Исходные размеры изображения: {img_size['width']}x{img_size['height']}")
     print(f"Zoom уровни: {zooms}")
     print(f"Имя базы данных: {db_name}")
+    print(f"Угол поворота: {rotate_angle:.2f} градусов")
 
     if args.analyze:
         for zoom in zooms:
