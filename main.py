@@ -203,6 +203,7 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
     # Compute original resize size without extreme corners
     tile_top_left = calc_tile_object(in_coords["top_left"][0], in_coords["top_left"][1], zoom)
     tile_bottom_right = calc_tile_object(in_coords["bottom_right"][0], in_coords["bottom_right"][1], zoom)
+    tile_bottom_left = calc_tile_object(in_coords["bottom_left"][0], in_coords["bottom_left"][1], zoom)
     orig_new_size = {
         "width": (tile_bottom_right["coords_tile"]["x"] - tile_top_left["coords_tile"]["x"] + 1) * 256,
         "height": (tile_bottom_right["coords_tile"]["y"] - tile_top_left["coords_tile"]["y"] + 1) * 256,
@@ -210,6 +211,7 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
     orig_shift = {
         "top_left": find_pixel_coords(256, 256, tile_top_left["coords_gps"], in_coords["top_left"]),
         "bottom_right": find_pixel_coords(256, 256, tile_bottom_right["coords_gps"], in_coords["bottom_right"]),
+        "bottom_left": find_pixel_coords(256, 256, tile_bottom_left["coords_gps"], in_coords["bottom_left"]),
     }
 
     # Use bounding box of dst_points for resize
@@ -290,9 +292,9 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
     rotated_img = resized_img.rotate(rotate_angle, expand=True, resample=Image.BICUBIC)
     rotated_img.save("test_image_rotated.png")
 
-    raise
     final_img = Image.new("RGBA", (new_size["width"], new_size["height"]))
-    final_img.paste(rotated_img, (offset_x, offset_y))
+    # final_img.paste(rotated_img, (offset_x, offset_y))
+    final_img.paste(rotated_img, (orig_shift['bottom_left'][0], orig_shift['top_left'][1]))
 
     # Save for debugging
     final_img.save("test_image.png")
