@@ -5,7 +5,7 @@ import sys
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Скрипт для упаковки изображений в sqlitedb-файл карты с использованием указанных GPS-координат (по Web-Mercator в десятичных градусах (WGS84)).",
+        description="Скрипт для упаковки изображений в sqlitedb-файл карты с использованием указанных GPS-координат (в десятичных градусах (UTM/WGS84)).",
         usage="%(prog)s <image_file> <top_left_lat> <top_left_lon> <top_right_lat> <top_right_lon> <bottom_right_lat> <bottom_right_lon> <bottom_left_lat> <bottom_left_lon> [max_zoom] [output_format] [quality] [--analyze]",
     )
 

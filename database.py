@@ -18,7 +18,7 @@ def get_database_filename(image_file):
     return db_name
 
 
-def create_database(db_name, max_zoom=None, min_zoom=0, conn=None):
+def create_database(db_name, max_zoom=None, min_zoom=3, conn=None):
     """
     Создает новый файл базы данных SQLite и инициализирует таблицы tiles и info.
 

@@ -9,7 +9,7 @@ TILE_SIZE = 256
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict) -> int:
+def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rotate_angle: float) -> int:
     """
     Рассчитывает оптимальный уровень масштабирования (Z-уровень) для изображения,
     чтобы оно отображалось пиксель в пиксель в проекции Web Mercator.
@@ -44,13 +44,31 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict) -> 
     if img_width_px == 0 or img_height_px == 0:
         raise ValueError("Размеры изображения после обрезки слишком малы для расчета Z.")
 
-    # 2. Извлечение координат для расчета охвата
-    # Для расчета охвата по горизонтали берем долготу левого и правого края
-    lon_left = coords["top_left"][1]
-    lon_right = coords["top_right"][1]
-    # Для расчета охвата по вертикали берем широту верхнего и нижнего края
-    lat_top = coords["top_left"][0]
-    lat_bottom = coords["bottom_left"][0]
+    # 1.5. Расчет размеров после поворота (математически, bounding box)
+    theta_rad = math.radians(rotate_angle)
+    cos_a = abs(math.cos(theta_rad))
+    sin_a = abs(math.sin(theta_rad))
+
+    rot_width = math.ceil(img_width_px * cos_a + img_height_px * sin_a)
+    rot_height = math.ceil(img_height_px * cos_a + img_width_px * sin_a)
+
+    rot_width = (rot_width // TILE_SIZE) * TILE_SIZE
+    rot_height = (rot_height // TILE_SIZE) * TILE_SIZE
+
+    logging.info(f"Размеры изображения после поворота на {rotate_angle:.2f} градусов: {rot_width}x{rot_height}px")
+
+    img_width_px = rot_width
+    img_height_px = rot_height
+
+    # 2. Извлечение координат для расчета охвата (используем крайние координаты из всех четырех углов)
+    # Для расчета охвата по горизонтали берем мин и макс долготы
+    all_lons = [coord[1] for coord in coords.values()]
+    lon_left = min(all_lons)
+    lon_right = max(all_lons)
+    # Для расчета охвата по вертикали берем макс и мин широты
+    all_lats = [coord[0] for coord in coords.values()]
+    lat_top = max(all_lats)
+    lat_bottom = min(all_lats)
 
     # 3. Расчет охвата по горизонтали (долгота в градусах)
     delta_lon = abs(lon_right - lon_left)
@@ -320,6 +338,59 @@ def lat_lon_to_mercator_pos(lat_deg, lon_deg):
     y_pos = max(0.0, min(1.0, y_pos))
 
     return x_pos, y_pos
+
+
+def solve_system(A, B):
+    """
+    Solves A * x = B using Gaussian elimination.
+    A is list of lists, B is list, returns x list.
+    """
+    n = len(A)
+    augmented = [A[i] + [B[i]] for i in range(n)]
+
+    # Forward elimination
+    for i in range(n):
+        # Find pivot
+        max_row = i
+        for j in range(i + 1, n):
+            if abs(augmented[j][i]) > abs(augmented[max_row][i]):
+                max_row = j
+        augmented[i], augmented[max_row] = augmented[max_row], augmented[i]
+
+        # Make pivot 1
+        pivot = augmented[i][i]
+        if pivot == 0:
+            raise ValueError("Singular matrix")
+        for k in range(n + 1):
+            augmented[i][k] /= pivot
+
+        # Eliminate
+        for j in range(n):
+            if j != i:
+                factor = augmented[j][i]
+                for k in range(n + 1):
+                    augmented[j][k] -= factor * augmented[i][k]
+
+    return [row[n] for row in augmented]
+
+
+def get_perspective_coeffs(src_points, dst_points):
+    """
+    Computes perspective transformation coefficients.
+    src_points and dst_points are 4 (x,y) tuples each.
+    Returns [a,b,c,d,e,f,g,h] for PIL's PERSPECTIVE.
+    """
+    A = []
+    B = []
+    for i in range(4):
+        x, y = src_points[i]
+        xp, yp = dst_points[i]
+        A.append([x, y, 1, 0, 0, 0, -xp * x, -xp * y])
+        B.append(xp)
+        A.append([0, 0, 0, x, y, 1, -yp * x, -yp * y])
+        B.append(yp)
+    coeffs = solve_system(A, B)
+    return coeffs
 
 
 def find_pixel_coords(
