@@ -1,4 +1,3 @@
-import pytest
 from map_calc_tools import get_tile_coords_by_gps
 
 def test_test():

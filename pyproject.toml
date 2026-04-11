@@ -14,10 +14,11 @@ line-length = 120
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.12.5",
 ]
 
 [tool.pytest.ini_options]
-minversion = "9.0"
+minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = "."
 # python_files = test_*.py *_test.py

@@ -13,11 +13,7 @@ from database import get_database_filename, create_database, insert_tile
 from map_calc_tools import (
     calculate_optimal_z,
     calc_tile_object,
-    get_tile_4corners_gps,
-    get_tile_coords_by_gps,
-    get_tile_center_gps,
     find_pixel_coords,
-    get_perspective_coeffs,
 )
 
 
@@ -40,17 +36,12 @@ def precalculate_values(zoom, coords, img_size, rotate_angle):
         "height": (max_y - min_y + 1) * 256,
     }
 
-    # Debug prints
-    print(f"Zoom {zoom}: min_x={min_x}, max_x={max_x}, min_y={min_y}, max_y={max_y}")
-    print(f"Tile coords: {[(k, tile_objects[k]['coords_tile']) for k in tile_objects]}")
-
     # Compute canvas pixel positions for each corner
     corner_positions = {}
     for k, v in tile_objects.items():
         tile_x_offset = v["coords_tile"]["x"] - min_x
         tile_y_offset = v["coords_tile"]["y"] - min_y
         pixel_in_tile = find_pixel_coords(256, 256, v["coords_gps"], coords[k])
-        print(f"{k}: tile_offset=({tile_x_offset},{tile_y_offset}), pixel_in_tile={pixel_in_tile}")
         if pixel_in_tile:
             canvas_x = tile_x_offset * 256 + pixel_in_tile[0]
             canvas_y = tile_y_offset * 256 + pixel_in_tile[1]
@@ -58,9 +49,6 @@ def precalculate_values(zoom, coords, img_size, rotate_angle):
         else:
             # If not found, use approximate
             corner_positions[k] = (tile_x_offset * 256, tile_y_offset * 256)
-
-    # Debug print corner positions
-    print(f"Corner positions: {corner_positions}")
 
     # Also, the top_left tile for tiling
     tile_top_left = calc_tile_object(coords["top_left"][0], coords["top_left"][1], zoom)  # original
@@ -204,48 +192,20 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
     tile_top_left = calc_tile_object(in_coords["top_left"][0], in_coords["top_left"][1], zoom)
     tile_bottom_right = calc_tile_object(in_coords["bottom_right"][0], in_coords["bottom_right"][1], zoom)
     tile_bottom_left = calc_tile_object(in_coords["bottom_left"][0], in_coords["bottom_left"][1], zoom)
-    orig_new_size = {
-        "width": (tile_bottom_right["coords_tile"]["x"] - tile_top_left["coords_tile"]["x"] + 1) * 256,
-        "height": (tile_bottom_right["coords_tile"]["y"] - tile_top_left["coords_tile"]["y"] + 1) * 256,
-    }
     orig_shift = {
         "top_left": find_pixel_coords(256, 256, tile_top_left["coords_gps"], in_coords["top_left"]),
         "bottom_right": find_pixel_coords(256, 256, tile_bottom_right["coords_gps"], in_coords["bottom_right"]),
         "bottom_left": find_pixel_coords(256, 256, tile_bottom_left["coords_gps"], in_coords["bottom_left"]),
     }
 
-    # Use bounding box of dst_points for resize
-    dst_points = [
-        corner_positions["top_left"],
-        corner_positions["top_right"],
-        corner_positions["bottom_right"],
-        corner_positions["bottom_left"],
-    ]
-
-    dst_x = [p[0] for p in dst_points]
-    dst_y = [p[1] for p in dst_points]
-    # new_width = int(max(dst_x) - min(dst_x))
-    # new_height = int(max(dst_y) - min(dst_y))
     new_width = int(calculate_distance(corner_positions["top_left"], corner_positions["top_right"]))
     new_height = int(calculate_distance(corner_positions["top_right"], corner_positions["bottom_right"]))
-
-    print(f"dst_point: {dst_points}")
-    print(f"New resize size: {new_width}x{new_height}")
 
     if new_width <= 0 or new_height <= 0:
         print(f"Пропускаем zoom {zoom}: размеры для resample некорректны ({new_width}x{new_height})")
         return
 
     resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-    # Apply perspective transform to map corners to canvas positions
-    src_points = [(0, 0), (new_width, 0), (new_width, new_height), (0, new_height)]
-    dst_points = [
-        corner_positions["top_left"],
-        corner_positions["top_right"],
-        corner_positions["bottom_right"],
-        corner_positions["bottom_left"],
-    ]
 
     # Rotate without expand and paste at calculated offset
     w = resized_img.width
@@ -268,32 +228,9 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
         rot_y = center_y + dx * sin_a + dy * cos_a
         rotated_positions[k] = (rot_x, rot_y)
 
-    # Choose reference points based on rotation tilt (clockwise when rotate_angle <=0)
-    if rotate_angle <= 0:
-        offset_x_based_on = "bottom_left"
-        offset_y_based_on = "top_left"
-    else:
-        offset_x_based_on = "top_left"
-        offset_y_based_on = "top_right"
-
-    print("\n\n!!!calculate_corner_shifts: ", calculate_corner_shifts(new_width, new_height, -rotate_angle))
-    print("!!!calculate_rotated_corners: ", calculate_rotated_corners(new_width, new_height, -rotate_angle))
-    print(f"rotate_angle = {rotate_angle}\n\n")
-
-    print(f"corner_positions: {corner_positions}")
-    print(f"rotated_positions: {rotated_positions}")
-    print(f"offset_x_based_on = {offset_x_based_on}, offset_y_based_on = {offset_y_based_on}")
-
-    offset_x = int(corner_positions[offset_x_based_on][0] - rotated_positions[offset_x_based_on][0])
-    offset_y = int(corner_positions[offset_y_based_on][1] - rotated_positions[offset_y_based_on][1])
-
-    print(f"Rotation angle: {rotate_angle}, offset: ({offset_x}, {offset_y})")
-
     rotated_img = resized_img.rotate(rotate_angle, expand=True, resample=Image.BICUBIC)
-    rotated_img.save("test_image_rotated.png")
 
     final_img = Image.new("RGBA", (new_size["width"], new_size["height"]))
-    # final_img.paste(rotated_img, (offset_x, offset_y))
     final_img.paste(rotated_img, (orig_shift['bottom_left'][0], orig_shift['top_left'][1]))
 
     # Save for debugging

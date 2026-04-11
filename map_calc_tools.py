@@ -1,12 +1,9 @@
 #!/usr/bin/env python
 
 import math
-import logging
 
 # Константа размера тайла в пикселях
 TILE_SIZE = 256
-
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rotate_angle: float) -> int:
@@ -37,7 +34,7 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
     img_height_px = (img_height_px // TILE_SIZE) * TILE_SIZE
 
     if img_width_px != original_width or img_height_px != original_height:
-        logging.info(
+        print(
             f"Изображение обрезано для кратности 256: {original_width}x{original_height}px -> {img_width_px}x{img_height_px}px"
         )
 
@@ -55,7 +52,7 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
     rot_width = (rot_width // TILE_SIZE) * TILE_SIZE
     rot_height = (rot_height // TILE_SIZE) * TILE_SIZE
 
-    logging.info(f"Размеры изображения после поворота на {rotate_angle:.2f} градусов: {rot_width}x{rot_height}px")
+    print(f"Размеры изображения после поворота на {rotate_angle:.2f} градусов: {rot_width}x{rot_height}px")
 
     img_width_px = rot_width
     img_height_px = rot_height
@@ -88,7 +85,7 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
             pos = (1.0 - merc_n / math.pi) / 2.0
             return pos
         except ValueError as e:
-            logging.error(f"Ошибка вычисления Меркатора для широты {lat_deg}: {e}")
+            print(f"Ошибка вычисления Меркатора для широты {lat_deg}: {e}")
             return None
 
     m_top = lat_to_mercator_pos(lat_top)
@@ -112,9 +109,9 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
     # чтобы изображение гарантированно влезло в тайловую сетку без апскейла.
     optimal_z = math.floor(min(z_horiz, z_vert))
 
-    logging.info(f"Рассчитано Z_горизонтальное: {z_horiz:.2f}")
-    logging.info(f"Рассчитано Z_вертикальное: {z_vert:.2f}")
-    logging.info(f"Оптимальный Z для использования: {optimal_z}")
+    print(f"Рассчитано Z_горизонтальное: {z_horiz:.2f}")
+    print(f"Рассчитано Z_вертикальное: {z_vert:.2f}")
+    print(f"Оптимальный Z для использования: {optimal_z}")
 
     return optimal_z
 
@@ -294,28 +291,6 @@ def get_tile_4corners_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, floa
     }
 
     return result
-
-
-def lat_lon_to_mercator_pos(lat_deg, lon_deg):
-    """
-    Преобразует GPS-координаты в относительные координаты Меркатора (от 0 до 1).
-    X=0 на -180 долг., X=1 на +180 долг.
-    Y=0 на +85.05 шир., Y=1 на -85.05 шир.
-    """
-    # X-позиция
-    x_pos = (lon_deg + 180.0) / 360.0
-
-    # Y-позиция
-    lat_rad = math.radians(lat_deg)
-    # Используем ту же формулу, что и раньше:
-    merc_n = math.log(math.tan(lat_rad) + (1.0 / math.cos(lat_rad)))
-    y_pos = (1.0 - merc_n / math.pi) / 2.0
-
-    # Ограничиваем значения в пределах от 0 до 1
-    x_pos = max(0.0, min(1.0, x_pos))
-    y_pos = max(0.0, min(1.0, y_pos))
-
-    return x_pos, y_pos
 
 
 def lat_lon_to_mercator_pos(lat_deg, lon_deg):
