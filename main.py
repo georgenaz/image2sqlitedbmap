@@ -297,7 +297,7 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
     final_img.paste(rotated_img, (orig_shift['bottom_left'][0], orig_shift['top_left'][1]))
 
     # Save for debugging
-    final_img.save("test_image.png")
+    # final_img.save("test_image.png")
 
     num_tiles_x = new_size["width"] // 256
     num_tiles_y = new_size["height"] // 256

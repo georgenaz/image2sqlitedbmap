@@ -10,3 +10,20 @@ dependencies = [
 ]
 [tool.ruff]
 line-length = 120
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+pythonpath = "."
+# python_files = test_*.py *_test.py
+# python_functions = test_*
+addopts = [
+#   "-vv",				        # подробнейший вывод хода теста
+  "-v",				            # более подробный вывод хода теста
+  "--import-mode=importlib"  	# меньше проблем с импортами
+]
