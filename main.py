@@ -307,8 +307,8 @@ def main():
         max_zoom = args.max_zoom
 
     # Определяем zoom уровни от 3 до max_zoom
-    # min_zoom = 3
-    min_zoom = max_zoom
+    min_zoom = 3
+    # min_zoom = max_zoom
     zooms = list(range(min_zoom, max_zoom + 1))
 
     # Генерируем уникальное имя базы данных

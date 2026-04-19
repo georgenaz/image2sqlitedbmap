@@ -5,6 +5,35 @@ import math
 # Константа размера тайла в пикселях
 TILE_SIZE = 256
 
+# Максимально допустимая широта для Web Mercator (±85.051129°)
+MAX_LATITUDE = 85.051129
+
+# Полоса Земли по долготе
+LON_RANGE = 360.0
+LON_OFFSET = 180.0
+
+
+def validate_gps_coords(lat: float, lon: float) -> None:
+    """
+    Проверяет корректность GPS-координат для Web Mercator.
+
+    Args:
+        lat: Широта в десятичных градусах.
+        lon: Долгота в десятичных градусах.
+
+    Raises:
+        ValueError: Если координаты выходят за допустимые пределы.
+    """
+    if not (-90.0 <= lat <= 90.0):
+        raise ValueError(f"Широта должна быть в диапазоне [-90, 90], получено: {lat}")
+    if not (-180.0 <= lon <= 180.0):
+        raise ValueError(f"Долгота должна быть в диапазоне [-180, 180], получено: {lon}")
+    if abs(lat) > MAX_LATITUDE:
+        raise ValueError(
+            f"Широта {lat}° выходит за пределы Web Mercator (±{MAX_LATITUDE}°). "
+            f"Проекция не определена для полярных регионов."
+        )
+
 
 def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rotate_angle: float) -> int:
     """
@@ -25,6 +54,9 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
     Returns:
         Оптимальный уровень масштабирования Z (целое число).
     """
+    # Validate all GPS coordinates
+    for coord in coords.values():
+        validate_gps_coords(coord[0], coord[1])
 
     # 1. Обработка обрезки до ближайшего значения, кратного 256
     original_width = img_width_px
@@ -69,9 +101,9 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
 
     # 3. Расчет охвата по горизонтали (долгота в градусах)
     delta_lon = abs(lon_right - lon_left)
-    # Убеждаемся, что разница не превышает 360 градусов (если карта пересекает 180 меридиан)
-    if delta_lon > 180:
-        delta_lon = 360 - delta_lon
+    # Убеждаемся, что разница не превышает 180 градусов (если карта пересекает 180 меридиан)
+    if delta_lon > LON_OFFSET:
+        delta_lon = LON_RANGE - delta_lon
 
     # 4. Расчет охвата по вертикали (Меркаторские относительные координаты 0 до 1)
 
@@ -99,7 +131,7 @@ def calculate_optimal_z(img_width_px: int, img_height_px: int, coords: dict, rot
     # 5. Расчет Z для обеих осей
 
     # Z_horizontal = log2( (ImageWidthPixels * 360) / (DeltaLon * 256) )
-    z_horiz = math.log2((img_width_px * 360) / (delta_lon * TILE_SIZE))
+    z_horiz = math.log2((img_width_px * LON_RANGE) / (delta_lon * TILE_SIZE))
 
     # Z_vertical = log2( ImageHeightPixels / (DeltaM * 256) )
     z_vert = math.log2(img_height_px / (delta_m * TILE_SIZE))
@@ -129,13 +161,14 @@ def get_tile_coords_by_gps(lat: float, lon: float, z: int) -> tuple[int, int]:
     Returns:
         Кортеж (tile_x, tile_y) с целочисленными координатами тайла.
     """
+    validate_gps_coords(lat, lon)
 
     # 1. Расчет N - общего количества тайлов на данном уровне Z
     n = 2**z
 
     # 2. Расчет X-координаты тайла
     # Формула: floor(N * ((lon + 180) / 360))
-    x_tile = math.floor(n * ((lon + 180.0) / 360.0))
+    x_tile = math.floor(n * ((lon + LON_OFFSET) / LON_RANGE))
 
     # 3. Расчет Y-координаты тайла
     # Сначала переводим широту в радианы
@@ -203,18 +236,10 @@ def get_tile_center_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, float]
     Returns:
         Кортеж (latitude, longitude) с GPS-координатами центра тайла.
     """
-
-    # 1. Сначала найдем границы верхнего левого угла (0,0) тайла в относительных координатах.
-    # Чтобы найти центр, мы используем координаты верхнего левого угла тайла + 0.5 (полтайла)
-
-    # Долгота (Longitude) рассчитывается проще:
-    # x_pos_relative = (x + 0.5) / N
-    # lon = x_pos_relative * 360 - 180
-
     n = 2**z
 
     # x_tile + 0.5 дает нам центр тайла по X
-    lon_deg = (x_tile + 0.5) / n * 360.0 - 180.0
+    lon_deg = (x_tile + 0.5) / n * LON_RANGE - LON_OFFSET
 
     # 2. Широта (Latitude) требует обратных тригонометрических функций (обратный Меркатор):
 
@@ -253,7 +278,7 @@ def get_tile_lefttop_corner_gps(x_tile: int, y_tile: int, z: int) -> tuple[float
 
     n = 2**z
 
-    lon_deg = x_tile / n * 360.0 - 180.0
+    lon_deg = x_tile / n * LON_RANGE - LON_OFFSET
 
     y_pos_relative = y_tile / n
     merc_n = math.pi * (1.0 - 2.0 * y_pos_relative)
@@ -293,14 +318,23 @@ def get_tile_4corners_gps(x_tile: int, y_tile: int, z: int) -> tuple[float, floa
     return result
 
 
-def lat_lon_to_mercator_pos(lat_deg, lon_deg):
+def lat_lon_to_mercator_pos(lat_deg: float, lon_deg: float) -> tuple[float, float]:
     """
     Преобразует GPS-координаты в относительные координаты Меркатора (от 0 до 1).
     X=0 на -180 долг., X=1 на +180 долг.
     Y=0 на +85.05 шир., Y=1 на -85.05 шир.
+
+    Args:
+        lat_deg: Широта в градусах.
+        lon_deg: Долгота в градусах.
+
+    Returns:
+        Кортеж (x_pos, y_pos) — относительные координаты в диапазоне [0, 1].
     """
+    validate_gps_coords(lat_deg, lon_deg)
+
     # X-позиция
-    x_pos = (lon_deg + 180.0) / 360.0
+    x_pos = (lon_deg + LON_OFFSET) / LON_RANGE
 
     # Y-позиция
     lat_rad = math.radians(lat_deg)
@@ -376,6 +410,7 @@ def find_pixel_coords(
 ) -> tuple[int, int] | None:
     """
     Вычисляет координаты пикселя на изображении, соответствующие заданной GPS-координате.
+    Использует все 4 угла для точного определения границ.
 
     Args:
         img_width_px: Ширина изображения в пикселях.
@@ -383,52 +418,64 @@ def find_pixel_coords(
         img_corners: Словарь с GPS-координатами углов изображения.
                      Пример: {
                          'top_left': (lat_tl, lon_tl),
+                         'top_right': (lat_tr, lon_tr),
                          'bottom_right': (lat_br, lon_br),
-                         ...}
+                         'bottom_left': (lat_bl, lon_bl)
+                     }
         target_point: Кортеж (target_lat, target_lon) искомой GPS-точки.
 
     Returns:
         Кортеж (pixel_x, pixel_y) или None, если точка выходит за границы изображения.
     """
-
-    # 1. Получаем GPS-координаты границ из словаря углов (предполагаем прямоугольность)
-    lat_top = img_corners["top_left"][0]
-    lon_left = img_corners["top_left"][1]
-    lat_bottom = img_corners["bottom_right"][0]
-    lon_right = img_corners["bottom_right"][1]
+    # 1. Извлекаем все 4 угла
+    lat_tl, lon_tl = img_corners["top_left"]
+    lat_tr, lon_tr = img_corners["top_right"]
+    lat_br, lon_br = img_corners["bottom_right"]
+    lat_bl, lon_bl = img_corners["bottom_left"]
 
     target_lat, target_lon = target_point
 
-    # 2. Преобразуем границы изображения в относительные координаты Меркатора (0 до 1)
-    merc_x_left, merc_y_top = lat_lon_to_mercator_pos(lat_top, lon_left)
-    merc_x_right, merc_y_bottom = lat_lon_to_mercator_pos(lat_bottom, lon_right)
+    # 2. Определяем границы по всем 4 углам
+    # Для longitude: берём минимум и максимум из всех углов
+    all_lons = [lon_tl, lon_tr, lon_br, lon_bl]
+    lon_min = min(all_lons)
+    lon_max = max(all_lons)
 
-    # 3. Преобразуем целевую точку в относительные координаты Меркатора
+    # Для latitude: учитываем, что в Меркаторе Y инвертирован (север = 0, юг = 1)
+    all_lats = [lat_tl, lat_tr, lat_br, lat_bl]
+    lat_north = max(all_lats)  # северная границa
+    lat_south = min(all_lats)  # южная границa
+
+    # 3. Преобразуем в координаты Меркатора
+    merc_left, merc_top = lat_lon_to_mercator_pos(lat_north, lon_min)
+    merc_right, merc_bottom = lat_lon_to_mercator_pos(lat_south, lon_max)
     merc_x_target, merc_y_target = lat_lon_to_mercator_pos(target_lat, target_lon)
 
-    # 4. Проверяем, находится ли точка в пределах границ изображения по Меркатору
-    if not (merc_x_left <= merc_x_target <= merc_x_right and merc_y_top <= merc_y_target <= merc_y_bottom):
+    # 4. Проверяем, находится ли точка в пределах границ изображения
+    merc_x_min = min(merc_left, merc_right)
+    merc_x_max = max(merc_left, merc_right)
+    merc_y_min = min(merc_top, merc_bottom)
+    merc_y_max = max(merc_top, merc_bottom)
+
+    if not (merc_x_min <= merc_x_target <= merc_x_max and merc_y_min <= merc_y_target <= merc_y_max):
         print("Внимание: Целевая точка находится за пределами GPS-границ изображения.")
-        # Можно вернуть None или координаты ближайшего края
-        # return None
 
-    # 5. Рассчитываем пропорциональное положение точки внутри изображения
+    # 5. Рассчитываем относительное положение (0.0–1.0)
+    span_x = merc_x_max - merc_x_min
+    span_y = merc_y_max - merc_y_min
 
-    # Относительное положение по X внутри изображения (от 0.0 до 1.0)
-    # Используем min/max на случай, если пользователь ввел некорректные углы (например, поменял left/right)
-    span_x = abs(merc_x_right - merc_x_left)
-    pos_x_relative_to_image = (merc_x_target - min(merc_x_left, merc_x_right)) / span_x
+    if span_x == 0 or span_y == 0:
+        print("Ошибка: нулевой диапазон GPS-координат изображения.")
+        return None
 
-    # Относительное положение по Y внутри изображения (от 0.0 до 1.0)
-    span_y = abs(merc_y_bottom - merc_y_top)
-    pos_y_relative_to_image = (merc_y_target - min(merc_y_top, merc_y_bottom)) / span_y
+    pos_x_relative = (merc_x_target - merc_x_min) / span_x
+    pos_y_relative = (merc_y_target - merc_y_min) / span_y
 
-    # 6. Масштабируем относительные позиции в пиксельные координаты
-    # Округляем до целых пикселей
-    pixel_x = int(round(pos_x_relative_to_image * img_width_px))
-    pixel_y = int(round(pos_y_relative_to_image * img_height_px))
+    # 6. Масштабируем в пиксельные координаты
+    pixel_x = int(round(pos_x_relative * img_width_px))
+    pixel_y = int(round(pos_y_relative * img_height_px))
 
-    # Убеждаемся, что пиксели находятся внутри изображения
+    # Ограничиваем пределами изображения
     pixel_x = max(0, min(pixel_x, img_width_px - 1))
     pixel_y = max(0, min(pixel_y, img_height_px - 1))
 

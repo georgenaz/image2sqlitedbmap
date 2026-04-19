@@ -12,5 +12,9 @@ wheels/
 # uv python package manager's files
 uv.lock
 .python-version
+
+
 test_image.png
 *.sqlitedb
+.qwen/
+
