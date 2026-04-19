@@ -198,8 +198,21 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
         "bottom_left": find_pixel_coords(256, 256, tile_bottom_left["coords_gps"], in_coords["bottom_left"]),
     }
 
-    new_width = int(calculate_distance(corner_positions["top_left"], corner_positions["top_right"]))
-    new_height = int(calculate_distance(corner_positions["top_right"], corner_positions["bottom_right"]))
+    # Calculate the target dimensions (bounding box size)
+    target_width = int(calculate_distance(corner_positions["top_left"], corner_positions["top_right"]))
+    target_height = int(calculate_distance(corner_positions["top_right"], corner_positions["bottom_right"]))
+
+    # Apply artificial coefficients for size correction
+    width_coeff = 1.0
+    height_coeff = 1.0
+
+    new_width = int(target_width * width_coeff)
+    new_height = int(target_height * height_coeff)
+
+    # Rotate without expand and paste at calculated offset
+    angle_rad = math.radians(rotate_angle)
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
 
     if new_width <= 0 or new_height <= 0:
         print(f"Пропускаем zoom {zoom}: размеры для resample некорректны ({new_width}x{new_height})")
@@ -207,39 +220,30 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
 
     resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-    # Rotate without expand and paste at calculated offset
     w = resized_img.width
     h = resized_img.height
     center_x = w / 2
     center_y = h / 2
-    angle_rad = math.radians(rotate_angle)
-    cos_a = math.cos(angle_rad)
-    sin_a = math.sin(angle_rad)
 
-    # Compute rotated positions for all corners
-    corner_names = ["top_left", "top_right", "bottom_right", "bottom_left"]
-    rotated_positions = {}
-    for i, k in enumerate(corner_names):
-        x = (i % 2) * w
-        y = (i // 2) * h
-        dx = x - center_x
-        dy = y - center_y
-        rot_x = center_x + dx * cos_a - dy * sin_a
-        rot_y = center_y + dx * sin_a + dy * cos_a
-        rotated_positions[k] = (rot_x, rot_y)
+    # Compute where the top-left corner of the original image ends up after rotation
+    # The top-left corner (0, 0) relative to original center
+    dx = 0 - center_x
+    dy = 0 - center_y
+    rot_x = center_x + dx * cos_a - dy * sin_a
+    rot_y = center_y + dx * sin_a + dy * cos_a
 
     rotated_img = resized_img.rotate(rotate_angle, expand=True, resample=Image.BICUBIC)
 
-    # Position the rotated image by aligning its center with the center of the target positions
-    # This should be more robust than trying to align corners
+    # Position the rotated image by aligning its center with the center of the target corner positions
+    # This provides better alignment for rotated images
 
     # Calculate the center of the target corner positions
-    center_x = sum(pos[0] for pos in corner_positions.values()) / 4
-    center_y = sum(pos[1] for pos in corner_positions.values()) / 4
+    target_center_x = sum(pos[0] for pos in corner_positions.values()) / 4
+    target_center_y = sum(pos[1] for pos in corner_positions.values()) / 4
 
-    # The rotated image is centered on its canvas, so place its center at the target center
-    paste_x = int(center_x - rotated_img.width / 2)
-    paste_y = int(center_y - rotated_img.height / 2)
+    # The rotated image is centered on its canvas, so align its center with the target center
+    paste_x = int(target_center_x - rotated_img.width / 2)
+    paste_y = int(target_center_y - rotated_img.height / 2)
 
     final_img = Image.new("RGBA", (new_size["width"], new_size["height"]))
     final_img.paste(rotated_img, (paste_x, paste_y))
@@ -313,6 +317,7 @@ def main():
     delta_y_meters = delta_lat * meters_per_degree_lat
     delta_x_meters = delta_lon * meters_per_degree_lon
     rotate_angle = math.degrees(math.atan2(delta_y_meters, delta_x_meters))
+    rotate_angle *= 1.0
 
     # Рассчитываем оптимальный zoom, если не указан
     if args.max_zoom is None:
