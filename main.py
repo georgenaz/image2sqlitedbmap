@@ -184,7 +184,7 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
 
     if img.format == "JPEG":
         buffer = io.BytesIO()
-        img.save(buffer, format="PNG")
+        img.save(buffer, format="PNG", compress_level=9, optimize=True)
         buffer.seek(0)
         img = Image.open(buffer)
 
@@ -230,11 +230,25 @@ def process_image(conn, zoom, img_file, new_size, corner_positions, rotate_angle
 
     rotated_img = resized_img.rotate(rotate_angle, expand=True, resample=Image.BICUBIC)
 
-    final_img = Image.new("RGBA", (new_size["width"], new_size["height"]))
-    final_img.paste(rotated_img, (orig_shift['bottom_left'][0], orig_shift['top_left'][1]))
+    # Position the rotated image by aligning its center with the center of the target positions
+    # This should be more robust than trying to align corners
 
-    # Save for debugging
-    # final_img.save("test_image.png")
+    # Calculate the center of the target corner positions
+    center_x = sum(pos[0] for pos in corner_positions.values()) / 4
+    center_y = sum(pos[1] for pos in corner_positions.values()) / 4
+
+    # The rotated image is centered on its canvas, so place its center at the target center
+    paste_x = int(center_x - rotated_img.width / 2)
+    paste_y = int(center_y - rotated_img.height / 2)
+
+    final_img = Image.new("RGBA", (new_size["width"], new_size["height"]))
+    final_img.paste(rotated_img, (paste_x, paste_y))
+
+    # for max compression
+    final_img = final_img.convert("P", palette=Image.ADAPTIVE, colors=256)
+
+    # Save for debugging with maximum compression
+    final_img.save("test_image.png", compress_level=9, optimize=True)
 
     num_tiles_x = new_size["width"] // 256
     num_tiles_y = new_size["height"] // 256
@@ -307,7 +321,7 @@ def main():
         max_zoom = args.max_zoom
 
     # Определяем zoom уровни от 3 до max_zoom
-    min_zoom = 3
+    min_zoom = 7
     # min_zoom = max_zoom
     zooms = list(range(min_zoom, max_zoom + 1))
 
