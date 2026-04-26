@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
 
 # Virtual environments
 .venv
@@ -17,4 +18,5 @@ uv.lock
 test_image.png
 *.sqlitedb
 .qwen/
+.ruff_cache/
 
