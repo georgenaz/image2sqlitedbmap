@@ -14,9 +14,14 @@ wheels/
 uv.lock
 .python-version
 
-
 test_image.png
 *.sqlitedb
-.qwen/
-.ruff_cache/
+src_map_files/
+output/
+
+# GDAL / временные файлы
+*.vrt
+*.tif
+*.mbtiles
+output_tiles_folder/
 

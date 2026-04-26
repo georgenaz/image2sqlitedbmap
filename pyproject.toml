@@ -3,28 +3,16 @@ name = "image2sqlitedbmap"
 version = "0.1.0"
 description = "Packing an image into sqlitedb for use with navigation software such as osmand"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10,<3.12"
 dependencies = [
-    "ipython>=9.8.0",
-    "pillow>=12.0.0",
+    "gdal>=3.8,<3.12.4",
+    "mbutil>=0.3.0",
+    "numpy>=1.26",
+    "pillow>=10.0.0",
+    "pyproj>=3.6",
 ]
+[tool.setuptools]
+py-modules = ["main", "map_parser", "transformer", "tiler", "database", "map_calc_tools"]
+
 [tool.ruff]
 line-length = 120
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-    "ruff>=0.12.5",
-]
-
-[tool.pytest.ini_options]
-minversion = "8.0"
-testpaths = ["tests"]
-pythonpath = "."
-# python_files = test_*.py *_test.py
-# python_functions = test_*
-addopts = [
-#   "-vv",				        # подробнейший вывод хода теста
-  "-v",				            # более подробный вывод хода теста
-  "--import-mode=importlib"  	# меньше проблем с импортами
-]

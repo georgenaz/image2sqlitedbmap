@@ -1,106 +1,64 @@
 # image2sqlitedbmap
 
-Convert georeferenced images into SQLite database tiles compatible with navigation software such as [OsmAnd](https://osmand.net/).
+Convert [OziExplorer](https://www.oziexplorer.com/) `.map` files into [OsmAnd](https://osmand.net/)-compatible SQLiteDB offline map tiles.
 
-## Overview
+## What it does
 
-This tool takes an image and GPS coordinates for its four corners, then generates map tiles in the Web Mercator projection (XYZ tile format) stored in a SQLite database. The resulting `.sqlitedb` file can be used with offline navigation applications.
+Given an OziExplorer `.map` file (which references an image and UTM ground-control points), the tool:
 
-## Features
-
-- Automatic calculation of optimal zoom level based on image resolution and GPS coverage
-- Image rotation and perspective transformation to align with map projection
-- Multi-zoom level tile generation
-- SQLite database output compatible with OsmAnd and similar software
+1. Parses the `.map` file — extracts image filename, UTM coordinates, GPS corners.
+2. Validates the referenced image exists and matches the declared dimensions.
+3. Computes optimal Web Mercator zoom level for pixel-perfect display (no upscaling).
+4. Shows a summary and asks for confirmation before proceeding.
+5. Warps the image from UTM to EPSG:3857 (Web Mercator) via GDAL.
+6. Tiles the result with `gdal2tiles`, optimizes PNGs (palette + compression) via Pillow, packs with `mbutil`.
+7. Produces an OsmAnd-ready `.sqlitedb` file with proper `tiles` and `info` tables.
 
 ## Requirements
 
-- Python 3.11+
-- [Pillow](https://pillow.readthedocs.io/) for image processing
+- **Python 3.11**
+- **GDAL** ≥ 3.8 (system library + Python bindings — versions must match)
+- uv (or pip)
 
-## Installation
+## Install
 
 ```bash
-pip install pillow
+uv venv --python 3.11
+uv pip install -e .
 ```
 
 ## Usage
 
 ```bash
-python main.py <image_file> <top_left_lat> <top_left_lon> <top_right_lat> <top_right_lon> <bottom_right_lat> <bottom_right_lon> <bottom_left_lat> <bottom_left_lon> [max_zoom] [output_format] [quality] [--analyze]
+uv run python main.py <map_file> [options]
 ```
 
-### Arguments
+**Arguments:**
 
 | Argument | Description |
-|----------|-------------|
-| `image_file` | Image file (png, jpg, jpeg) |
-| `top_left_lat` | Latitude of top-left corner (decimal degrees) |
-| `top_left_lon` | Longitude of top-left corner (decimal degrees) |
-| `top_right_lat` | Latitude of top-right corner (decimal degrees) |
-| `top_right_lon` | Longitude of top-right corner (decimal degrees) |
-| `bottom_right_lat` | Latitude of bottom-right corner (decimal degrees) |
-| `bottom_right_lon` | Longitude of bottom-right corner (decimal degrees) |
-| `bottom_left_lat` | Latitude of bottom-left corner (decimal degrees) |
-| `bottom_left_lon` | Longitude of bottom-left corner (decimal degrees) |
-| `max_zoom` | Maximum zoom level (0-22, optional - auto-calculated if omitted) |
-| `output_format` | Output format: png or jpeg (default: png) |
-| `quality` | JPEG quality 1-100 (default: 85, only for jpeg) |
-| `--analyze` | Analyze image without generating tiles |
+|---|---|
+| `map_file` | Path to an OziExplorer `.map` file |
+| `-o, --output` | Custom name for the output `.sqlitedb` file |
+| `--work-dir` | Directory for temporary files (default: alongside the image) |
+| `--keep-temp` | Keep intermediate files (VRT, TIF, tiles, MBTiles) |
 
-### Example
+**Example:**
 
 ```bash
-python main.py map.png 55.751244 37.618423 55.751244 37.628423 55.741244 37.628423 55.741244 37.618423
+uv run python main.py src_map_files/mmb26v.map
 ```
 
-## How It Works
+The tool prints map info, lets you change the output filename, and asks for confirmation before processing.
 
-1. **Input**: Image + GPS coordinates for all 4 corners
-2. **Calculate optimal zoom**: Determines best zoom level to match image resolution to tile grid
-3. **Compute rotation angle**: Accounts for map tilt from corner coordinates
-4. **Transform image**: Resize → rotate → paste into canvas with perspective correction
-5. **Generate tiles**: Slice into 256×256 tiles and store in SQLite DB
-
-## Database Schema
-
-The output `.sqlitedb` file contains two tables:
-
-```sql
-CREATE TABLE tiles (
-    x INTEGER, y INTEGER, z INTEGER, s INTEGER,
-    image BLOB,
-    PRIMARY KEY (x, y, z, s)
-);
-
-CREATE TABLE info (
-    maxzoom INTEGER, minzoom INTEGER, tilenumbering TEXT
-);
-```
-
-## Project Structure
+## Project structure
 
 ```
-image2sqlitedbmap/
-├── main.py              # Main entry point
-├── arguments.py         # CLI argument parsing
-├── database.py          # SQLite database operations
-├── map_calc_tools.py    # Web Mercator math utilities
-└── tests/               # Test suite
-```
-
-## Development
-
-### Running tests
-
-```bash
-pytest
-```
-
-### Code linting
-
-```bash
-ruff check .
+main.py              # CLI entry point, interactive pipeline
+map_parser.py        # OziExplorer .map file parser
+transformer.py       # GDAL warp: UTM → Web Mercator (EPSG:3857)
+tiler.py             # gdal2tiles + PNG optimization + mbutil packing
+database.py          # MBTiles → OsmAnd sqlitedb conversion
+map_calc_tools.py    # Zoom level calculations, UTM ↔ WGS84
 ```
 
 ## License
