@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
-"""Интерактивное CLI-приложение для конвертации OziExplorer .map → OsmAnd sqlitedb.
+"""Интерактивное CLI-приложение для конвертации OziExplorer .map → OsmAnd sqlitedb / MBTiles.
 
 Пайплайн:
 1. Парсинг .map-файла
 2. Проверка изображения
 3. Вычисление оптимального zoom
-4. Интерактив: вывод информации → подтверждение пользователя
+4. Интерактив: вывод информации → выбор формата → подтверждение
 5. Трансформация GDAL (VRT+GCP → warp EPSG:3857)
 6. Нарезка на тайлы (gdal2tiles) + оптимизация PNG (PIL) + упаковка (mbutil)
-7. Конвертация MBTiles → OsmAnd sqlitedb
+7. (Если sqlitedb) Конвертация MBTiles → OsmAnd sqlitedb
 8. Очистка временных файлов
 """
 
@@ -18,9 +18,15 @@ import logging
 import os
 import shutil
 import sys
-import tempfile
 
-from database import get_database_filename, mbtiles_to_osmand_sqlitedb
+from database import (
+    FORMAT_MBTILES,
+    FORMAT_SQLITEDB,
+    VALID_FORMATS,
+    detect_format_by_extension,
+    get_output_filename,
+    mbtiles_to_osmand_sqlitedb,
+)
 from map_calc_tools import calculate_min_zoom, calculate_optimal_z, gcp_to_gps_corners
 from map_parser import MapFileData, parse_map_file, validate_image
 from tiler import process_tiles
@@ -32,13 +38,24 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 def parse_args() -> argparse.Namespace:
     """Разбор аргументов командной строки."""
     parser = argparse.ArgumentParser(
-        description="Конвертация OziExplorer .map-файла в sqlitedb-карту для OsmAnd.",
+        description="Конвертация OziExplorer .map-файла в карту для OsmAnd (sqlitedb) или MBTiles.",
     )
     parser.add_argument("map_file", help="Путь к .map-файлу OziExplorer")
     parser.add_argument(
         "-o", "--output",
-        help="Имя выходного sqlitedb-файла (без пути; по умолчанию — на основе имени изображения)",
+        help="Имя выходного файла (без пути). Расширение определяет формат, если --format не задан",
         default=None,
+    )
+    parser.add_argument(
+        "-f", "--format",
+        choices=VALID_FORMATS,
+        dest="output_format",
+        help="Выходной формат: sqlitedb (по умолчанию) или mbtiles",
+    )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Тихий режим: без подтверждений, формат по умолчанию (sqlitedb)",
     )
     parser.add_argument(
         "--work-dir",
@@ -48,14 +65,47 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--keep-temp",
         action="store_true",
-        help="Не удалять временные файлы (VRT, TIF, тайлы, MBTiles)",
+        help="Не удалять временные файлы (VRT, TIF, тайлы)",
     )
 
     return parser.parse_args()
 
 
+def resolve_format(args: argparse.Namespace) -> str | None:
+    """Определяет выходной формат из аргументов.
+
+    Приоритет:
+    1. Явно заданный --format
+    2. Расширение из --output
+    3. None (не определён — спросить у пользователя)
+
+    Returns:
+        Строка формата или None.
+    """
+    if args.output_format:
+        return args.output_format
+    if args.output:
+        return detect_format_by_extension(args.output)
+    return None
+
+
+def interactive_format_menu() -> str:
+    """Интерактивный выбор формата пользователем."""
+    print()
+    print("Выберите формат выходного файла:")
+    print("  1 — sqlitedb  (OsmAnd)  [по умолчанию]")
+    print("  2 — mbtiles")
+    while True:
+        answer = input("Ваш выбор [1]: ").strip()
+        if answer in ("", "1"):
+            return FORMAT_SQLITEDB
+        if answer == "2":
+            return FORMAT_MBTILES
+        print("Введите 1 или 2")
+
+
 def print_map_info(map_data: MapFileData, optimal_zoom: int, min_zoom: int, max_zoom_info: int,
-                   gps_corners: dict, db_path: str) -> None:
+                   gps_corners: dict, output_path: str, fmt: str) -> None:
     """Выводит пользователю всю полезную информацию о карте."""
     print()
     print("=" * 60)
@@ -87,35 +137,42 @@ def print_map_info(map_data: MapFileData, optimal_zoom: int, min_zoom: int, max_
     print(f"    max_zoom (в info):   {max_zoom_info}")
     print(f"    Диапазон нарезки:    {min_zoom} – {optimal_zoom}")
     print()
-    print(f"  Выходной файл:       {db_path}")
+    print(f"  Выходной формат:     {fmt}")
+    print(f"  Выходной файл:       {output_path}")
     print("=" * 60)
 
 
-def interactive_confirm() -> bool:
+def interactive_confirm(fmt: str) -> bool:
     """Запрашивает подтверждение пользователя на продолжение."""
     while True:
-        answer = input("\nПриступить к созданию sqlitedb? [y/N]: ").strip().lower()
-        if answer in ("y", "yes", "д", "да"):
+        answer = input(f"\nПриступить к созданию {fmt}? [Y/n]: ").strip().lower()
+        if answer in ("y", "yes", "д", "да", ""):
             return True
-        if answer in ("n", "no", "н", "нет", ""):
+        if answer in ("n", "no", "н", "нет"):
             return False
         print("Введите 'y' или 'n'")
 
 
-def interactive_db_name(default_path: str) -> str:
+def interactive_output_name(default_path: str, fmt: str) -> str:
     """Позволяет пользователю изменить имя выходного файла."""
     default_name = os.path.basename(default_path)
     new_name = input(f"\nИмя выходного файла [{default_name}]: ").strip()
     if not new_name:
         return default_path
-    # Подставляем расширение если нужно
-    if not new_name.endswith(".sqlitedb"):
-        new_name += ".sqlitedb"
+    # Подставляем расширение если не указано
+    ext = f".{fmt}"
+    if not new_name.lower().endswith(ext):
+        new_name += ext
     return os.path.join(os.path.dirname(default_path), new_name)
 
 
-def cleanup_temp_files(work_dir: str) -> None:
-    """Удаляет временные файлы."""
+def cleanup_temp_files(work_dir: str, final_mbtiles_path: str | None = None) -> None:
+    """Удаляет временные файлы.
+
+    Args:
+        work_dir: Рабочая директория.
+        final_mbtiles_path: Путь к финальному mbtiles-файлу (не удалять).
+    """
     temp_items = ["temp.vrt", "master_mercator.tif", "output_tiles_folder"]
     for item in temp_items:
         path = os.path.join(work_dir, item)
@@ -124,10 +181,13 @@ def cleanup_temp_files(work_dir: str) -> None:
         elif os.path.isfile(path):
             os.remove(path)
 
-    # Удаляем .mbtiles если есть
+    # Удаляем промежуточный .mbtiles, если он не является финальным выходным файлом
     for f in os.listdir(work_dir):
         if f.endswith(".mbtiles"):
-            os.remove(os.path.join(work_dir, f))
+            full_path = os.path.join(work_dir, f)
+            if final_mbtiles_path and os.path.abspath(full_path) == os.path.abspath(final_mbtiles_path):
+                continue
+            os.remove(full_path)
 
 
 def main() -> None:
@@ -158,31 +218,46 @@ def main() -> None:
 
     optimal_zoom = calculate_optimal_z(img_w, img_h, gps_corners)
     min_zoom = calculate_min_zoom(optimal_zoom, gps_corners)
-    # max_zoom в info — на 1 больше оптимального (требование OsmAnd)
     max_zoom_info = optimal_zoom + 1
 
-    # === Шаг 4: Интерактив ===
+    # === Шаг 4: Определение формата и имени файла ===
     work_dir = args.work_dir or os.path.dirname(os.path.abspath(map_data.image_filepath))
-    default_db_path = get_database_filename(map_data.image_filepath, work_dir)
+    fmt = resolve_format(args)
 
-    # Если пользователь указал имя — используем его
-    if args.output:
-        output_dir = os.path.dirname(default_db_path)
-        output_name = args.output
-        if not output_name.endswith(".sqlitedb"):
-            output_name += ".sqlitedb"
-        db_path = os.path.join(output_dir, output_name)
+    if args.quiet:
+        # Тихий режим: формат по умолчанию, без интерактива
+        if fmt is None:
+            fmt = FORMAT_SQLITEDB
+        output_path = get_output_filename(map_data.image_filepath, fmt, work_dir)
+        if args.output:
+            output_dir = os.path.dirname(output_path)
+            output_name = args.output
+            if not output_name.lower().endswith(f".{fmt}"):
+                output_name += f".{fmt}"
+            output_path = os.path.join(output_dir, output_name)
     else:
-        db_path = default_db_path
+        # Интерактивный режим
+        if fmt is None:
+            fmt = interactive_format_menu()
 
-    print_map_info(map_data, optimal_zoom, min_zoom, max_zoom_info, gps_corners, db_path)
+        output_path = get_output_filename(map_data.image_filepath, fmt, work_dir)
 
-    # Позволяем изменить имя файла
-    db_path = interactive_db_name(db_path)
+        # Если пользователь указал имя — используем его
+        if args.output:
+            output_dir = os.path.dirname(output_path)
+            output_name = args.output
+            if not output_name.lower().endswith(f".{fmt}"):
+                output_name += f".{fmt}"
+            output_path = os.path.join(output_dir, output_name)
 
-    if not interactive_confirm():
-        print("Отменено пользователем.")
-        sys.exit(0)
+        print_map_info(map_data, optimal_zoom, min_zoom, max_zoom_info, gps_corners, output_path, fmt)
+
+        # Позволяем изменить имя файла
+        output_path = interactive_output_name(output_path, fmt)
+
+        if not interactive_confirm(fmt):
+            print("Отменено пользователем.")
+            sys.exit(0)
 
     # === Шаг 5: Трансформация ===
     print("\nШаг 1/3: Трансформация изображения (UTM → Web Mercator)...")
@@ -192,7 +267,7 @@ def main() -> None:
         print(f"ОШИБКА трансформации: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # === Шаг 6: Нарезка + оптимизация + упаковка ===
+    # === Шаг 6: Нарезка + оптимизация + упаковка в MBTiles ===
     print("\nШаг 2/3: Нарезка на тайлы и оптимизация PNG...")
     try:
         mbtiles_path = process_tiles(tif_path, work_dir, min_zoom, optimal_zoom)
@@ -200,18 +275,27 @@ def main() -> None:
         print(f"ОШИБКА нарезки тайлов: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # === Шаг 7: Конвертация в OsmAnd sqlitedb ===
-    print("\nШаг 3/3: Формирование OsmAnd sqlitedb...")
-    try:
-        result_path = mbtiles_to_osmand_sqlitedb(mbtiles_path, db_path, max_zoom_info, min_zoom)
-    except Exception as e:
-        print(f"ОШИБКА формирования sqlitedb: {e}", file=sys.stderr)
-        sys.exit(1)
+    # === Шаг 7: Финальный выходной файл ===
+    if fmt == FORMAT_SQLITEDB:
+        print("\nШаг 3/3: Формирование OsmAnd sqlitedb...")
+        try:
+            result_path = mbtiles_to_osmand_sqlitedb(mbtiles_path, output_path, max_zoom_info, min_zoom)
+        except Exception as e:
+            print(f"ОШИБКА формирования sqlitedb: {e}", file=sys.stderr)
+            sys.exit(1)
+        final_mbtiles = None  # промежуточный mbtiles можно удалить
+    else:
+        # MBTiles — просто перемещаем в финальный путь
+        if os.path.abspath(mbtiles_path) != os.path.abspath(output_path):
+            shutil.move(mbtiles_path, output_path)
+        result_path = output_path
+        final_mbtiles = output_path  # не удалять — это финальный файл
+        print(f"\nMBTiles создан: {result_path}")
 
     # === Шаг 8: Очистка ===
     if not args.keep_temp:
         print("\nОчистка временных файлов...")
-        cleanup_temp_files(work_dir)
+        cleanup_temp_files(work_dir, final_mbtiles)
 
     file_size_mb = os.path.getsize(result_path) / (1024 * 1024)
     print(f"\nГотово! Файл создан: {result_path} ({file_size_mb:.1f} MB)")

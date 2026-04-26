@@ -13,29 +13,53 @@ import logging
 import os
 import sqlite3
 
+FORMAT_SQLITEDB = "sqlitedb"
+FORMAT_MBTILES = "mbtiles"
+VALID_FORMATS = (FORMAT_SQLITEDB, FORMAT_MBTILES)
 
-def get_database_filename(image_file: str, output_dir: str | None = None) -> str:
-    """Генерирует уникальное имя файла базы данных на основе имени файла изображения.
+EXT_TO_FORMAT = {
+    ".sqlitedb": FORMAT_SQLITEDB,
+    ".mbtiles": FORMAT_MBTILES,
+}
+
+
+def get_output_filename(image_file: str, fmt: str, output_dir: str | None = None) -> str:
+    """Генерирует уникальное имя выходного файла на основе имени изображения.
 
     Args:
         image_file: Имя или путь к файлу изображения.
-        output_dir: Директория для файла (по умолчанию — текущая).
+        fmt: Выходной формат (FORMAT_SQLITEDB или FORMAT_MBTILES).
+        output_dir: Директория для файла (по умолчанию — рядом с изображением).
 
     Returns:
-        Полный путь к файлу базы данных.
+        Полный путь к выходному файлу (не перетирающий существующий).
     """
     base_name = os.path.splitext(os.path.basename(image_file))[0]
     if output_dir is None:
         output_dir = os.path.dirname(os.path.abspath(image_file))
 
-    db_name = f"{base_name}.sqlitedb"
-    db_path = os.path.join(output_dir, db_name)
+    ext = f".{fmt}"
+    file_name = f"{base_name}{ext}"
+    file_path = os.path.join(output_dir, file_name)
     version = 1
-    while os.path.exists(db_path):
-        db_name = f"{base_name}-v{version}.sqlitedb"
-        db_path = os.path.join(output_dir, db_name)
+    while os.path.exists(file_path):
+        file_name = f"{base_name}-v{version}{ext}"
+        file_path = os.path.join(output_dir, file_name)
         version += 1
-    return db_path
+    return file_path
+
+
+def detect_format_by_extension(filename: str) -> str | None:
+    """Определяет формат по расширению файла.
+
+    Args:
+        filename: Имя файла.
+
+    Returns:
+        Строка формата или None если расширение неизвестно.
+    """
+    _, ext = os.path.splitext(filename.lower())
+    return EXT_TO_FORMAT.get(ext)
 
 
 def mbtiles_to_osmand_sqlitedb(mbtiles_path: str, output_path: str, max_zoom: int, min_zoom: int) -> str:
