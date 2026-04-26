@@ -73,6 +73,28 @@ def parse_arguments():
         action="store_true",
         help="Выполнить анализ указанного изображения",
     )
+    parser.add_argument(
+        "--offset_distance",
+        type=float,
+        default=0.0,
+        help="Расстояние коррекции смещения в милях (по умолчанию 0)",
+    )
+    parser.add_argument(
+        "--offset_direction",
+        type=float,
+        default=0.0,
+        help="Направление коррекции смещения в градусах (0=север, 90=восток, по умолчанию 0)",
+    )
+    parser.add_argument(
+        "--img_width",
+        type=int,
+        help="Ширина изображения в пикселях (для анализа без файла)",
+    )
+    parser.add_argument(
+        "--img_height",
+        type=int,
+        help="Высота изображения в пикселях (для анализа без файла)",
+    )
 
     # Если нет аргументов, показать помощь
     if len(sys.argv) == 1:
