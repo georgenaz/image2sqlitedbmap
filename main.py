@@ -145,10 +145,10 @@ def print_map_info(map_data: MapFileData, optimal_zoom: int, min_zoom: int, max_
 def interactive_confirm(fmt: str) -> bool:
     """Запрашивает подтверждение пользователя на продолжение."""
     while True:
-        answer = input(f"\nПриступить к созданию {fmt}? [Y/n]: ").strip().lower()
-        if answer in ("y", "yes", "д", "да", ""):
+        answer = input(f"\nПриступить к созданию {fmt}? [y/N]: ").strip().lower()
+        if answer in ("y", "yes", "д", "да"):
             return True
-        if answer in ("n", "no", "н", "нет"):
+        if answer in ("n", "no", "н", "нет", ""):
             return False
         print("Введите 'y' или 'n'")
 
