@@ -1,6 +1,6 @@
 # image2sqlitedbmap
 
-Convert [OziExplorer](https://www.oziexplorer.com/) `.map` files into [OsmAnd](https://osmand.net/)-compatible SQLiteDB offline map tiles.
+Convert [OziExplorer](https://www.oziexplorer.com/) `.map` files into [OsmAnd](https://osmand.net/)-compatible SQLiteDB or MBTiles offline map tiles.
 
 ## What it does
 
@@ -12,7 +12,7 @@ Given an OziExplorer `.map` file (which references an image and UTM ground-contr
 4. Shows a summary and asks for confirmation before proceeding.
 5. Warps the image from UTM to EPSG:3857 (Web Mercator) via GDAL.
 6. Tiles the result with `gdal2tiles`, optimizes PNGs (palette + compression) via Pillow, packs with `mbutil`.
-7. Produces an OsmAnd-ready `.sqlitedb` file with proper `tiles` and `info` tables.
+7. Produces an OsmAnd-ready `.sqlitedb` or standard `.mbtiles` file.
 
 ## Requirements
 
@@ -23,14 +23,13 @@ Given an OziExplorer `.map` file (which references an image and UTM ground-contr
 ## Install
 
 ```bash
-uv venv --python 3.11
-uv pip install -e .
+uv sync
 ```
 
 ## Usage
 
 ```bash
-uv run python main.py <map_file> [options]
+uv run main.py <map_file> [options]
 ```
 
 **Arguments:**
@@ -38,14 +37,35 @@ uv run python main.py <map_file> [options]
 | Argument | Description |
 |---|---|
 | `map_file` | Path to an OziExplorer `.map` file |
-| `-o, --output` | Custom name for the output `.sqlitedb` file |
+| `-f, --format` | Output format: `sqlitedb` (default) or `mbtiles` |
+| `-o, --output` | Output file name (without path). Extension is used to detect format if `--format` is not set |
+| `-q, --quiet` | Quiet mode: no prompts, uses defaults (sqlitedb, auto-generated name) |
 | `--work-dir` | Directory for temporary files (default: alongside the image) |
-| `--keep-temp` | Keep intermediate files (VRT, TIF, tiles, MBTiles) |
+| `--keep-temp` | Keep intermediate files (VRT, TIF, tiles) |
 
-**Example:**
+**Format detection rules (when `--format` is not specified):**
+
+1. If `-o` has a `.sqlitedb` or `.mbtiles` extension → format is detected from it.
+2. If `-o` is not set either → in interactive mode the user is prompted to choose; in quiet mode `sqlitedb` is used.
+3. If both `--format` and `-o` are given → `--format` takes precedence (extension is ignored).
+
+**Examples:**
 
 ```bash
-uv run python main.py src_map_files/mmb26v.map
+# Interactive — prompts for format and filename
+uv run main.py src_map_files/mmb26v.map
+
+# Produce sqlitedb explicitly
+uv run main.py src_map_files/mmb26v.map -f sqlitedb
+
+# Produce mbtiles, auto-detected from extension
+uv run main.py src_map_files/mmb26v.map -o result.mbtiles
+
+# Quiet mode — no prompts, defaults to sqlitedb
+uv run main.py src_map_files/mmb26v.map -q
+
+# Quiet mode with specific format and output name
+uv run main.py src_map_files/mmb26v.map -q -f mbtiles -o my_map.mbtiles
 ```
 
 The tool prints map info, lets you change the output filename, and asks for confirmation before processing.
@@ -57,7 +77,7 @@ main.py              # CLI entry point, interactive pipeline
 map_parser.py        # OziExplorer .map file parser
 transformer.py       # GDAL warp: UTM → Web Mercator (EPSG:3857)
 tiler.py             # gdal2tiles + PNG optimization + mbutil packing
-database.py          # MBTiles → OsmAnd sqlitedb conversion
+database.py          # MBTiles → OsmAnd sqlitedb conversion, format helpers
 map_calc_tools.py    # Zoom level calculations, UTM ↔ WGS84
 ```
 
