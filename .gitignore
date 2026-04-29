@@ -14,6 +14,8 @@ wheels/
 uv.lock
 .python-version
 
+.qwen
+QWEN.md
 test_image.png
 *.sqlitedb
 src_map_files/
