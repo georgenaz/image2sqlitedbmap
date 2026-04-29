@@ -2,8 +2,13 @@
 name = "image2sqlitedbmap"
 version = "0.2.0"
 description = "Packing an image into sqlitedb for use with navigation software such as osmand"
+license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
+
+[project.urls]
+Repository = "https://github.com/georgenaz/image2sqlitedbmap"
+
 dependencies = [
     "gdal>=3.8,<3.12.4",
     "mbutil>=0.3.0",
