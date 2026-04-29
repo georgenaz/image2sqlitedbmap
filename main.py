@@ -2,6 +2,8 @@
 
 """Интерактивное CLI-приложение для конвертации OziExplorer .map → OsmAnd sqlitedb / MBTiles.
 
+Repository: https://github.com/georgenaz/image2sqlitedbmap
+
 Пайплайн:
 1. Парсинг .map-файла
 2. Проверка изображения

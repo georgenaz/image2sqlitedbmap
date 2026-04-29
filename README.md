@@ -1,5 +1,7 @@
 # image2sqlitedbmap
 
+[![GitHub](https://img.shields.io/badge/GitHub-repository-blue)](https://github.com/georgenaz/image2sqlitedbmap)
+
 Convert [OziExplorer](https://www.oziexplorer.com/) `.map` files into [OsmAnd](https://osmand.net/)-compatible SQLiteDB or MBTiles offline map tiles.
 
 ## What it does
