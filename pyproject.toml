@@ -5,10 +5,6 @@ description = "Packing an image into sqlitedb for use with navigation software s
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
-
-[project.urls]
-Repository = "https://github.com/georgenaz/image2sqlitedbmap"
-
 dependencies = [
     "gdal>=3.8,<3.12.4",
     "mbutil>=0.3.0",
@@ -16,6 +12,10 @@ dependencies = [
     "pillow>=10.0.0",
     "pyproj>=3.6",
 ]
+
+[project.urls]
+Repository = "https://github.com/georgenaz/image2sqlitedbmap"
+
 [tool.setuptools]
 py-modules = ["main", "map_parser", "transformer", "tiler", "database", "map_calc_tools"]
 
