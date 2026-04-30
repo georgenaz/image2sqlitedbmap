@@ -69,7 +69,7 @@ def mbtiles_to_osmand_sqlitedb(mbtiles_path: str, output_path: str, max_zoom: in
     1. Копирование MBTiles файла
     2. Переименование таблицы tiles → tiles_src
     3. Создание таблиц info и tiles в формате OsmAnd
-    4. Перенос данных из tiles_src в tiles
+    4. Перенос данных из tiles_src в tiles с инверсией Y (TMS→XYZ)
     5. Удаление служебных таблиц MBTiles
     6. VACUUM для оптимизации
 
@@ -122,12 +122,13 @@ def mbtiles_to_osmand_sqlitedb(mbtiles_path: str, output_path: str, max_zoom: in
         )
 
         # 4. Переносим данные из MBTiles
-        # MBTiles использует TMS нумерацию (Y от низа),
-        # но в данном случае gdal2tiles генерирует XYZ (Google) нумерацию
-        # и mbutil упаковывает как есть, поэтому инверсия Y не нужна
+        # MBTiles хранит TMS нумерацию (Y=0 внизу),
+        # OsmAnd sqlitedb использует XYZ/Google нумерацию (Y=0 вверху).
+        # Формула конверсии: y_xyz = 2^z - 1 - y_tms
         cursor.execute("""
             INSERT INTO tiles (z, x, y, s, image)
-            SELECT zoom_level, tile_column, tile_row, 0, tile_data
+            SELECT zoom_level, tile_column,
+                   (1 << zoom_level) - 1 - tile_row, 0, tile_data
             FROM tiles_src
         """)
 
