@@ -9,7 +9,6 @@
 
 import logging
 import os
-import tempfile
 
 from osgeo import gdal, osr
 
@@ -20,6 +19,10 @@ gdal.UseExceptions()
 
 def create_vrt_with_gcp(map_data: MapFileData, vrt_path: str) -> str:
     """Создаёт VRT-файл с GCP-точками из данных .map-файла.
+
+    Поддерживает два формата GCP:
+    - UTM grid: GCP с easting/northing в проекции UTM
+    - Geographic deg: GCP с lat/lon в географической СК (datum)
 
     Args:
         map_data: Данные из .map-файла.
@@ -38,13 +41,24 @@ def create_vrt_with_gcp(map_data: MapFileData, vrt_path: str) -> str:
     # Формируем список GCP-точек
     gcps = []
     for gcp in map_data.gcp_points:
-        g = gdal.GCP(
-            gcp.easting,      # X (easting)
-            gcp.northing,     # Y (northing)
-            0.0,              # Z
-            gcp.pixel_x,     # pixel
-            gcp.pixel_y,     # line
-        )
+        if gcp.is_geographic:
+            # Geographic: GCP координаты — lon, lat
+            g = gdal.GCP(
+                gcp.lon,          # X (longitude)
+                gcp.lat,          # Y (latitude)
+                0.0,              # Z
+                gcp.pixel_x,     # pixel
+                gcp.pixel_y,     # line
+            )
+        else:
+            # UTM grid: GCP координаты — easting, northing
+            g = gdal.GCP(
+                gcp.easting,      # X (easting)
+                gcp.northing,     # Y (northing)
+                0.0,              # Z
+                gcp.pixel_x,     # pixel
+                gcp.pixel_y,     # line
+            )
         gcps.append(g)
 
     # Создаём VRT с expand rgba
@@ -62,7 +76,7 @@ def create_vrt_with_gcp(map_data: MapFileData, vrt_path: str) -> str:
     vrt_ds.FlushCache()
     vrt_ds = None
 
-    logging.info(f"VRT создан: {vrt_path} с {len(gcps)} GCP-точками")
+    logging.info(f"Врт создан: {vrt_path} с {len(gcps)} GCP-точками (CRS: {map_data.epsg_code})")
     return vrt_path
 
 

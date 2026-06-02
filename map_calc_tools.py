@@ -8,6 +8,7 @@
 
 import logging
 import math
+from typing import Any
 
 from pyproj import Transformer
 
@@ -102,40 +103,89 @@ def _utm_corners_to_wgs84(corners: list[tuple[float, float]], utm_zone: int) -> 
     return result
 
 
-def gcp_to_gps_corners(gcp_points: list) -> dict:
-    """Преобразует GCP-точки из .map-файла в GPS-координаты углов.
-
-    GCP-точки привязаны к пикселям (0,0), (W,0), (W,H), (0,H).
-    Конвертирует их UTM-координаты в WGS84.
+def _classify_gcp_corners(gcp_points: list, width: int, height: int) -> dict:
+    """Классифицирует GCP-точки по углам изображения на основе пиксельных координат.
 
     Args:
-        gcp_points: Список GCPPoint из map_parser.
+        gcp_points: Список GCPPoint (не менее 4).
+        width: Ширина изображения.
+        height: Высота изображения.
 
     Returns:
-        Словарь с GPS-координатами углов.
+        Словарь {top_left, top_right, bottom_right, bottom_left} → GCPPoint.
     """
+    cx, cy = width / 2, height / 2
+    corners: dict[str, Any] = {}
+    for gcp in gcp_points:
+        if gcp.pixel_x <= cx and gcp.pixel_y <= cy:
+            corners["top_left"] = gcp
+        elif gcp.pixel_x > cx and gcp.pixel_y <= cy:
+            corners["top_right"] = gcp
+        elif gcp.pixel_x > cx and gcp.pixel_y > cy:
+            corners["bottom_right"] = gcp
+        else:
+            corners["bottom_left"] = gcp
+    return corners
+
+
+def gcp_to_gps_corners(map_data) -> dict:
+    """Преобразует GCP-точки из .map-файла в GPS-координаты углов (WGS84).
+
+    Поддерживает два формата GCP:
+    - UTM grid: конвертирует easting/northing → WGS84 через pyproj
+    - Geographic deg: конвертирует lat/lon из source datum → WGS84 через pyproj
+
+    Args:
+        map_data: Объект MapFileData из map_parser.
+
+    Returns:
+        Словарь с GPS-координатами углов (WGS84).
+    """
+    gcp_points = map_data.gcp_points
     if not gcp_points:
         raise ValueError("Нет GCP-точек")
 
-    utm_zone = gcp_points[0].utm_zone
-    utm_corners = [(gcp.easting, gcp.northing) for gcp in gcp_points]
-    gps_corners = _utm_corners_to_wgs84(utm_corners, utm_zone)
+    first = gcp_points[0]
+    width = map_data.image_width
+    height = map_data.image_height
 
-    # GCP точки в .map-файле: (0,0), (W,0), (W,H), (0,H) → TL, TR, BR, BL
-    if len(gps_corners) >= 4:
-        return {
-            "top_left": gps_corners[0],
-            "top_right": gps_corners[1],
-            "bottom_right": gps_corners[2],
-            "bottom_left": gps_corners[3],
-        }
-    elif len(gps_corners) >= 2:
-        # Fallback: используем только diagonal
-        return {
-            "top_left": gps_corners[0],
-            "top_right": (gps_corners[0][0], gps_corners[1][1]),
-            "bottom_right": gps_corners[1],
-            "bottom_left": (gps_corners[1][0], gps_corners[0][1]),
-        }
+    if first.is_geographic:
+        # Geographic GCP: lat/lon в исходном datum → конвертация в WGS84
+        source_crs = map_data.epsg_code
+        transformer = Transformer.from_crs(source_crs, "EPSG:4326", always_xy=True)
+
+        classified = _classify_gcp_corners(gcp_points, width, height)
+        if len(classified) < 4:
+            raise ValueError(f"Не удалось классифицировать углы: найдено {len(classified)}/4")
+
+        result = {}
+        for key, gcp in classified.items():
+            lon, lat = transformer.transform(gcp.lon, gcp.lat)
+            result[key] = (lat, lon)
+        return result
     else:
-        raise ValueError("Недостаточно GCP-точек для расчёта")
+        # UTM grid GCP: easting/northing → WGS84
+        utm_zone = first.utm_zone
+        utm_corners = [(gcp.easting, gcp.northing) for gcp in gcp_points]
+        gps_corners = _utm_corners_to_wgs84(utm_corners, utm_zone)
+
+        # Классификация по пиксельным координатам для надёжности
+        classified = _classify_gcp_corners(gcp_points, width, height)
+        if len(classified) < 4:
+            # Fallback на фиксированный порядок TL, TR, BR, BL
+            if len(gps_corners) >= 4:
+                return {
+                    "top_left": gps_corners[0],
+                    "top_right": gps_corners[1],
+                    "bottom_right": gps_corners[2],
+                    "bottom_left": gps_corners[3],
+                }
+            raise ValueError("Недостаточно GCP-точек для расчёта углов")
+
+        # Маппим: pixel corner → gps coordinate по индексу GCP
+        gcp_idx_map = {id(gcp): i for i, gcp in enumerate(gcp_points)}
+        result = {}
+        for key, gcp in classified.items():
+            idx = gcp_idx_map[id(gcp)]
+            result[key] = gps_corners[idx]
+        return result

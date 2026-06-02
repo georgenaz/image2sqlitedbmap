@@ -12,15 +12,29 @@ import re
 from dataclasses import dataclass, field
 
 
+# Маппинг: имя datum (из .map-файла) → EPSG-код географической СК
+DATUM_TO_EPSG: dict[str, str] = {
+    "WGS 84": "EPSG:4326",
+    "WGS84": "EPSG:4326",
+    "Pulkovo 1942": "EPSG:4284",
+    "Pulkovo 1942 (2)": "EPSG:4284",
+    "Pulkovo 1995": "EPSG:4200",
+    "Pulkovo 1995 (2)": "EPSG:4200",
+}
+
+
 @dataclass
 class GCPPoint:
-    """Ground Control Point — привязка пикселя к UTM-координатам."""
+    """Ground Control Point — привязка пикселя к координатам."""
 
     pixel_x: int
     pixel_y: int
-    utm_zone: int
-    easting: float
-    northing: float
+    utm_zone: int = 0
+    easting: float = 0.0
+    northing: float = 0.0
+    lat: float = 0.0
+    lon: float = 0.0
+    is_geographic: bool = False
 
 
 @dataclass
@@ -36,35 +50,78 @@ class MapFileData:
     image_width: int = 0
     image_height: int = 0
     datum: str = ""
+    projection: str = ""
+    projection_setup: list[float] = field(default_factory=list)
+    crs_type: str = "utm_grid"  # "utm_grid" | "geographic_deg"
 
 
 def _parse_point_line(line: str) -> GCPPoint | None:
-    """Парсит строку Point01,xy,0,0,...,grid,37,519022.5,6193504.8,N."""
-    # Формат: Point##,xy,px,py,in,deg,...,grid,zone,easting,northing,N
+    """Парсит строку Point##,xy,... — поддерживает UTM grid и geographic deg форматы.
+
+    UTM grid:  Point01,xy,0,0,in,deg,,,N,,,E,grid,37,519022.5,6193504.8,N
+    Deg:       Point01,xy,10,5876,in,deg,55,39.999694,N,37,29.999973,E,grid,,,N
+    """
     parts = line.split(",")
     if len(parts) < 16:
         return None
 
     pixel_x_str = parts[2].strip()
     pixel_y_str = parts[3].strip()
-    grid_marker = parts[12].strip()
+
+    if not pixel_x_str or not pixel_y_str:
+        return None
+
+    try:
+        pixel_x = int(pixel_x_str)
+        pixel_y = int(pixel_y_str)
+    except ValueError:
+        return None
+
+    # Пытаемся распарсить UTM grid (zone + easting + northing заполнены)
     zone_str = parts[13].strip()
     easting_str = parts[14].strip()
     northing_str = parts[15].strip()
 
-    if grid_marker != "grid" or not pixel_x_str or not pixel_y_str:
-        return None
+    if zone_str and easting_str and northing_str:
+        try:
+            return GCPPoint(
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+                utm_zone=int(zone_str),
+                easting=float(easting_str),
+                northing=float(northing_str),
+                is_geographic=False,
+            )
+        except (ValueError, IndexError):
+            pass
 
-    try:
-        return GCPPoint(
-            pixel_x=int(pixel_x_str),
-            pixel_y=int(pixel_y_str),
-            utm_zone=int(zone_str),
-            easting=float(easting_str),
-            northing=float(northing_str),
-        )
-    except (ValueError, IndexError):
-        return None
+    # Пытаемся распарсить geographic deg (градусы + десятичные минуты)
+    lat_deg_str = parts[6].strip()
+    lat_min_str = parts[7].strip()
+    lat_ns = parts[8].strip().upper()
+    lon_deg_str = parts[9].strip()
+    lon_min_str = parts[10].strip()
+    lon_ew = parts[11].strip().upper()
+
+    if lat_deg_str and lat_min_str and lon_deg_str and lon_min_str:
+        try:
+            lat = int(lat_deg_str) + float(lat_min_str) / 60.0
+            if lat_ns == "S":
+                lat = -lat
+            lon = int(lon_deg_str) + float(lon_min_str) / 60.0
+            if lon_ew == "W":
+                lon = -lon
+            return GCPPoint(
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+                lat=lat,
+                lon=lon,
+                is_geographic=True,
+            )
+        except (ValueError, IndexError):
+            pass
+
+    return None
 
 
 def _parse_mmpll_line(line: str) -> tuple[float, float] | None:
@@ -124,15 +181,9 @@ def parse_map_file(map_filepath: str) -> MapFileData:
     if "OziExplorer Map Data File" not in header:
         raise ValueError(f"Некорректный формат .map-файла: {header}")
 
-    # Строка 2: имя файла изображения
+    # Строка 2 (index 1): имя файла изображения
     data.image_filename = lines[1].strip() if len(lines) > 1 else ""
     data.image_filepath = os.path.join(map_dir, data.image_filename)
-
-    # Строка 4: Datum (WGS 84)
-    if len(lines) > 3:
-        datum_line = lines[3].strip()
-        if datum_line.startswith("WGS"):
-            data.datum = "WGS 84"
 
     for line in lines:
         line_stripped = line.strip()
@@ -142,6 +193,20 @@ def parse_map_file(map_filepath: str) -> MapFileData:
             gcp = _parse_point_line(line_stripped)
             if gcp is not None:
                 data.gcp_points.append(gcp)
+
+        # Projection Setup — параметры проекции
+        elif line_stripped.startswith("Projection Setup,"):
+            setup_parts = line_stripped.split(",")
+            try:
+                data.projection_setup = [float(p.strip()) for p in setup_parts[1:] if p.strip()]
+            except ValueError:
+                pass
+
+        # Map Projection — имя проекции
+        elif line_stripped.startswith("Map Projection,"):
+            proj_parts = line_stripped.split(",")
+            if len(proj_parts) > 1:
+                data.projection = proj_parts[1].strip()
 
         # MMPLL — GPS-координаты углов
         elif line_stripped.startswith("MMPLL,"):
@@ -155,14 +220,30 @@ def parse_map_file(map_filepath: str) -> MapFileData:
             if dims is not None:
                 data.image_width, data.image_height = dims
 
-    # Определяем UTM-зону и EPSG из первой GCP-точки
+    # Datum: строка 5 (index 4), формат "Datum Name,..."
+    # Примеры: "WGS 84,,0,0,WGS 84" или "Pulkovo 1942 (2),WGS 84,0,0,WGS 84"
+    if len(lines) > 4:
+        datum_parts = lines[4].strip().split(",")
+        if datum_parts:
+            datum_name = datum_parts[0].strip()
+            # Проверяем, что строка действительно содержит datum (не "Reserved" и не пустое)
+            if datum_name and not datum_name.startswith("Reserved"):
+                data.datum = datum_name
+
+    # Определяем тип CRS и EPSG
     if data.gcp_points:
-        data.utm_zone = data.gcp_points[0].utm_zone
-        # Определяем полушарие по northing
-        if data.gcp_points[0].northing >= 0:
-            data.epsg_code = f"EPSG:326{data.utm_zone:02d}"
+        first_gcp = data.gcp_points[0]
+        if first_gcp.is_geographic:
+            data.crs_type = "geographic_deg"
+            # EPSG из datum
+            data.epsg_code = DATUM_TO_EPSG.get(data.datum, "")
         else:
-            data.epsg_code = f"EPSG:327{data.utm_zone:02d}"
+            data.crs_type = "utm_grid"
+            data.utm_zone = first_gcp.utm_zone
+            if first_gcp.northing >= 0:
+                data.epsg_code = f"EPSG:326{data.utm_zone:02d}"
+            else:
+                data.epsg_code = f"EPSG:327{data.utm_zone:02d}"
 
     # Валидация
     if not data.image_filename:
@@ -173,11 +254,15 @@ def parse_map_file(map_filepath: str) -> MapFileData:
         raise ValueError("Не найдены GPS-координаты углов (MMPLL)")
     if data.image_width == 0 or data.image_height == 0:
         raise ValueError("Не удалось определить размер изображения (IWH)")
+    if not data.epsg_code:
+        raise ValueError(f"Не удалось определить EPSG для datum '{data.datum}'. "
+                         f"Поддерживаемые: {', '.join(DATUM_TO_EPSG.keys())}")
 
     logging.info(
         f"Map-файл: изображение={data.image_filename}, "
         f"размер={data.image_width}x{data.image_height}, "
-        f"EPSG={data.epsg_code}, "
+        f"datum={data.datum}, projection={data.projection}, "
+        f"CRS type={data.crs_type}, EPSG={data.epsg_code}, "
         f"GCP-точек={len(data.gcp_points)}, "
         f"GPS-углов={len(data.gps_corners)}"
     )

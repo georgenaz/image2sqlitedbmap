@@ -116,9 +116,15 @@ def print_map_info(map_data: MapFileData, optimal_zoom: int, min_zoom: int, max_
     print(f"  Файл карты:         {map_data.image_filename}")
     print(f"  Изображение:        {map_data.image_filepath}")
     print(f"  Размер изображения: {map_data.image_width} x {map_data.image_height} px")
-    print(f"  UTM зона:           {map_data.utm_zone} ({map_data.epsg_code})")
+
+    if map_data.crs_type == "utm_grid":
+        print(f"  СК (CRS):           UTM зона {map_data.utm_zone} ({map_data.epsg_code})")
+    else:
+        print(f"  СК (CRS):           {map_data.projection}, {map_data.epsg_code}")
+        print(f"  Datum:              {map_data.datum}")
+
     print()
-    print("  GPS-координаты углов (из UTM GCP):")
+    print("  GPS-координаты углов (из GCP → WGS84):")
     for label, key in [("Левый верхний", "top_left"), ("Правый верхний", "top_right"),
                        ("Правый нижний", "bottom_right"), ("Левый нижний", "bottom_left")]:
         lat, lon = gps_corners[key]
@@ -212,7 +218,7 @@ def main() -> None:
         sys.exit(1)
 
     # === Шаг 3: Вычисление zoom ===
-    gps_corners = gcp_to_gps_corners(map_data.gcp_points)
+    gps_corners = gcp_to_gps_corners(map_data)
 
     from PIL import Image
     with Image.open(map_data.image_filepath) as img:
@@ -262,7 +268,7 @@ def main() -> None:
             sys.exit(0)
 
     # === Шаг 5: Трансформация ===
-    print("\nШаг 1/3: Трансформация изображения (UTM → Web Mercator)...")
+    print(f"\nШаг 1/3: Трансформация изображения ({map_data.epsg_code} → Web Mercator)...")
     try:
         tif_path = transform_image(map_data, work_dir)
     except RuntimeError as e:
