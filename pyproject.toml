@@ -1,6 +1,6 @@
 [project]
 name = "image2sqlitedbmap"
-version = "0.2.1"
+version = "0.2.2"
 description = "Packing an image into sqlitedb for use with navigation software such as osmand"
 license = "Apache-2.0"
 readme = "README.md"

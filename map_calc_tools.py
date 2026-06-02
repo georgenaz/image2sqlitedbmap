@@ -8,9 +8,10 @@
 
 import logging
 import math
-from typing import Any
 
 from pyproj import Transformer
+
+from map_parser import GCPPoint, MapFileData
 
 TILE_SIZE = 256
 
@@ -82,18 +83,17 @@ def calculate_min_zoom(optimal_zoom: int, coords: dict) -> int:
     return max(1, optimal_zoom - 9)
 
 
-def _utm_corners_to_wgs84(corners: list[tuple[float, float]], utm_zone: int) -> list[tuple[float, float]]:
+def _utm_corners_to_wgs84(corners: list[tuple[float, float]], epsg_code: str) -> list[tuple[float, float]]:
     """Конвертирует UTM координаты (easting, northing) в WGS84 (lat, lon).
 
     Args:
         corners: Список (easting, northing) координат.
-        utm_zone: Номер UTM-зоны.
+        epsg_code: EPSG-код UTM-зоны (например, "EPSG:32637" или "EPSG:32737").
 
     Returns:
         Список (lat, lon) координат.
     """
-    epsg_utm = f"EPSG:326{utm_zone:02d}"
-    transformer = Transformer.from_crs(epsg_utm, "EPSG:4326", always_xy=True)
+    transformer = Transformer.from_crs(epsg_code, "EPSG:4326", always_xy=True)
 
     result = []
     for easting, northing in corners:
@@ -115,20 +115,25 @@ def _classify_gcp_corners(gcp_points: list, width: int, height: int) -> dict:
         Словарь {top_left, top_right, bottom_right, bottom_left} → GCPPoint.
     """
     cx, cy = width / 2, height / 2
-    corners: dict[str, Any] = {}
+    corners: dict[str, GCPPoint] = {}
     for gcp in gcp_points:
         if gcp.pixel_x <= cx and gcp.pixel_y <= cy:
-            corners["top_left"] = gcp
+            key = "top_left"
         elif gcp.pixel_x > cx and gcp.pixel_y <= cy:
-            corners["top_right"] = gcp
+            key = "top_right"
         elif gcp.pixel_x > cx and gcp.pixel_y > cy:
-            corners["bottom_right"] = gcp
+            key = "bottom_right"
         else:
-            corners["bottom_left"] = gcp
+            key = "bottom_left"
+        if key in corners:
+            logging.warning(f"Дублирующаяся GCP-точка в квадранте {key}: "
+                            f"перезапись ({corners[key].pixel_x},{corners[key].pixel_y}) → "
+                            f"({gcp.pixel_x},{gcp.pixel_y})")
+        corners[key] = gcp
     return corners
 
 
-def gcp_to_gps_corners(map_data) -> dict:
+def gcp_to_gps_corners(map_data: MapFileData) -> dict:
     """Преобразует GCP-точки из .map-файла в GPS-координаты углов (WGS84).
 
     Поддерживает два формата GCP:
@@ -165,9 +170,8 @@ def gcp_to_gps_corners(map_data) -> dict:
         return result
     else:
         # UTM grid GCP: easting/northing → WGS84
-        utm_zone = first.utm_zone
         utm_corners = [(gcp.easting, gcp.northing) for gcp in gcp_points]
-        gps_corners = _utm_corners_to_wgs84(utm_corners, utm_zone)
+        gps_corners = _utm_corners_to_wgs84(utm_corners, map_data.epsg_code)
 
         # Классификация по пиксельным координатам для надёжности
         classified = _classify_gcp_corners(gcp_points, width, height)

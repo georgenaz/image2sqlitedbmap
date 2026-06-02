@@ -76,7 +76,7 @@ def create_vrt_with_gcp(map_data: MapFileData, vrt_path: str) -> str:
     vrt_ds.FlushCache()
     vrt_ds = None
 
-    logging.info(f"Врт создан: {vrt_path} с {len(gcps)} GCP-точками (CRS: {map_data.epsg_code})")
+    logging.info(f"VRT создан: {vrt_path} с {len(gcps)} GCP-точками (CRS: {map_data.epsg_code})")
     return vrt_path
 
 

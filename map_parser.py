@@ -77,6 +77,11 @@ def _parse_point_line(line: str) -> GCPPoint | None:
     except ValueError:
         return None
 
+    # Проверяем, что позиция 12 содержит "grid" (или пусто для некоторых форматов)
+    grid_marker = parts[12].strip()
+    if grid_marker and grid_marker != "grid":
+        return None
+
     # Пытаемся распарсить UTM grid (zone + easting + northing заполнены)
     zone_str = parts[13].strip()
     easting_str = parts[14].strip()
@@ -244,6 +249,12 @@ def parse_map_file(map_filepath: str) -> MapFileData:
                 data.epsg_code = f"EPSG:326{data.utm_zone:02d}"
             else:
                 data.epsg_code = f"EPSG:327{data.utm_zone:02d}"
+
+    # Проверяем, что все GCP используют один формат
+    if data.gcp_points:
+        first_geo = data.gcp_points[0].is_geographic
+        if not all(gcp.is_geographic == first_geo for gcp in data.gcp_points):
+            raise ValueError("Смешанные форматы GCP (UTM grid + geographic deg) в одном файле")
 
     # Валидация
     if not data.image_filename:
