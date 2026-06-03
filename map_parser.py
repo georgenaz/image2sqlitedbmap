@@ -156,6 +156,29 @@ def _parse_iwh_line(line: str) -> tuple[int, int] | None:
         return None
 
 
+def _parse_mmpxy_line(line: str) -> tuple[int, int] | None:
+    """Парсит строку MMPXY,index,x,y — возвращает (x, y)."""
+    parts = line.split(",")
+    if len(parts) < 4:
+        return None
+    try:
+        x = int(float(parts[2].strip()))
+        y = int(float(parts[3].strip()))
+        return (x, y)
+    except (ValueError, IndexError):
+        return None
+
+
+def _read_image_dimensions(image_path: str) -> tuple[int, int] | None:
+    """Читает размеры изображения через PIL."""
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            return img.size
+    except Exception:
+        return None
+
+
 def parse_map_file(map_filepath: str) -> MapFileData:
     """Парсит OziExplorer .map-файл и возвращает структурированные данные.
 
@@ -189,6 +212,8 @@ def parse_map_file(map_filepath: str) -> MapFileData:
     # Строка 2 (index 1): имя файла изображения
     data.image_filename = lines[1].strip() if len(lines) > 1 else ""
     data.image_filepath = os.path.join(map_dir, data.image_filename)
+
+    mmpxy_coords: list[tuple[int, int]] = []
 
     for line in lines:
         line_stripped = line.strip()
@@ -224,6 +249,28 @@ def parse_map_file(map_filepath: str) -> MapFileData:
             dims = _parse_iwh_line(line_stripped)
             if dims is not None:
                 data.image_width, data.image_height = dims
+
+        # MMPXY — координаты углов карты в пикселях
+        elif line_stripped.startswith("MMPXY,"):
+            mpx = _parse_mmpxy_line(line_stripped)
+            if mpx is not None:
+                mmpxy_coords.append(mpx)
+
+    # Если IWH отсутствует — извлекаем размеры из MMPXY (max X/Y)
+    if (data.image_width == 0 or data.image_height == 0) and mmpxy_coords:
+        max_x = max(x for x, y in mmpxy_coords)
+        max_y = max(y for x, y in mmpxy_coords)
+        if max_x > 0 and max_y > 0:
+            data.image_width = max_x
+            data.image_height = max_y
+            logging.info(f"Размеры изображения из MMPXY: {max_x}x{max_y}")
+
+    # Если всё ещё нет — читаем из самого файла изображения
+    if (data.image_width == 0 or data.image_height == 0) and data.image_filepath:
+        img_dims = _read_image_dimensions(data.image_filepath)
+        if img_dims is not None:
+            data.image_width, data.image_height = img_dims
+            logging.info(f"Размеры изображения из файла: {img_dims[0]}x{img_dims[1]}")
 
     # Datum: строка 5 (index 4), формат "Datum Name,..."
     # Примеры: "WGS 84,,0,0,WGS 84" или "Pulkovo 1942 (2),WGS 84,0,0,WGS 84"
@@ -262,9 +309,9 @@ def parse_map_file(map_filepath: str) -> MapFileData:
     if len(data.gcp_points) < 3:
         raise ValueError(f"Нужно минимум 3 GCP-точки, найдено: {len(data.gcp_points)}")
     if not data.gps_corners:
-        raise ValueError("Не найдены GPS-координаты углов (MMPLL)")
+        logging.warning("Не найдены GPS-координаты углов (MMPLL) — будет использован расчёт из GCP")
     if data.image_width == 0 or data.image_height == 0:
-        raise ValueError("Не удалось определить размер изображения (IWH)")
+        raise ValueError("Не удалось определить размер изображения (IWH/MMPXY/PIL)")
     if not data.epsg_code:
         raise ValueError(f"Не удалось определить EPSG для datum '{data.datum}'. "
                          f"Поддерживаемые: {', '.join(DATUM_TO_EPSG.keys())}")

@@ -61,11 +61,19 @@ def create_vrt_with_gcp(map_data: MapFileData, vrt_path: str) -> str:
             )
         gcps.append(g)
 
-    # Создаём VRT с expand rgba
-    vrt_options = gdal.TranslateOptions(
-        format="VRT",
-        rgbExpand="rgba",
-    )
+    # Определяем, нужна ли распаковка палитры (indexed PNG)
+    tmp_ds = gdal.Open(image_path)
+    needs_expand = False
+    if tmp_ds:
+        band1 = tmp_ds.GetRasterBand(1)
+        needs_expand = band1.GetColorTable() is not None
+        tmp_ds = None
+
+    translate_kwargs = {"format": "VRT"}
+    if needs_expand:
+        translate_kwargs["rgbExpand"] = "rgba"
+
+    vrt_options = gdal.TranslateOptions(**translate_kwargs)
     vrt_ds = gdal.Translate(vrt_path, image_path, options=vrt_options)
 
     if vrt_ds is None:
